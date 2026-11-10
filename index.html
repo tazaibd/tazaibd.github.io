@@ -878,6 +878,12 @@
     var docFlow = null; // {type: "report"|"assignment"|"application"|"document"} while collecting document details
     var msgFlow = null; // {channel: "wa"|"email"|"ask", number?, addr?, content?} while preparing a WhatsApp/email message for the user to send
     var imageFlow = false; // true while waiting for the subject of a "draw an image" request
+    var explainFlow = false; // true while waiting for the topic after "Explain a topic" — the next plain message IS that topic
+    // The exact quick-chip labels. Chips are canned UI actions, never free
+    // conversation: they must never be read as a name, a photo request, a
+    // draw subject, or a Gemini prompt — the built-in brain answers them.
+    var CHIP_LABEL_RE = /^(draft an email|study plan|write a cv|summarize a document|explain a topic|explain|help with code|youtube script|seo tips|civil engineering|business ideas|translate|whatsapp message|draw an image|how do i talk\?|what can you do\?)[.!?]*$/i;
+    function isChipLabel(text) { return CHIP_LABEL_RE.test((text || "").trim()); }
     var lastJoke = -1, lastQuote = -1, lastFact = -1, lastRiddle = -1;
     var lastSong = -1, lastPoem = -1, lastScript = -1;
 
@@ -971,6 +977,13 @@
         if (/give a new name|a new name|another name|new name|onno nam|notun nam|অন্য নাম|নতুন নাম/.test(low)) {
           nameFlow = "typing"; botSay(nameAskNameText(lang)); return true;
         }
+        // A chip tap or a real request/question is NOT a nickname — close
+        // the question and let the message be answered normally. (Before
+        // this guard, any short text — even "Explain a topic" — was saved
+        // as the AI's name.)
+        if (isChipLabel(clean) || /\b(explain|help|topic|study|photo|image|what|why|how|when|where|who|code|plan|tips|translate|write|make|draw|send)\b/i.test(low)) {
+          nameFlow = null; return false;
+        }
         var asName = cleanAiName(clean);
         if (asName && clean.length <= 30 && !/^(hi|hello|hey|salam|assalamu|ok|okay|yes|no|hmm|thanks|thank)\b/i.test(low)) {
           nameFlow = null; setAiName(asName); botSay(nameSetText(lang, asName)); return true;
@@ -981,6 +994,7 @@
         if (/^(cancel|stop|বাদ দাও|থাক|থামো|lagbe na|lagbena)\b/i.test(low)) {
           nameFlow = null; setAiName(DEFAULT_AI_NAME); botSay(nameSetText(lang, DEFAULT_AI_NAME)); return true;
         }
+        if (isChipLabel(clean)) { nameFlow = null; return false; } // a chip tap is a request, not the new name
         var nm = cleanAiName(clean);
         if (nm && clean.length <= 30) { nameFlow = null; setAiName(nm); botSay(nameSetText(lang, nm)); return true; }
         nameFlow = null; return false;
@@ -1077,6 +1091,7 @@
     function extractBareNameAnswer(clean) {
       var s = String(clean || "").trim();
       if (!s || s.length > 34 || /[?？]/.test(s)) return "";
+      if (isChipLabel(s)) return ""; // a chip tap ("Civil engineering", "SEO tips"…) is a request, never a name
       var m = s.match(/^ami\s+(.+)$/i) || s.match(/^আমি\s+(.+)$/);
       var cand = m ? m[1] : s;
       var words = cand.replace(/\s+/g, " ").split(" ").filter(Boolean);
@@ -1114,9 +1129,13 @@
       if (aiNameAsked) return;
       aiNameAsked = true;
       try { localStorage.setItem(AI_NAME_ASKED_STORAGE, "1"); } catch (e) {}
-      nameFlow = "choice";
+      // The flow arms only when the question is actually SHOWN — arming it
+      // at schedule time meant a message sent during the delay (before the
+      // visitor ever saw the question) could be swallowed as a "name".
       setTimeout(function () {
-        if (nameFlow === "choice") botSay(nameQuestionText(lang), ["TazAI is fine", "Give a new name"]);
+        if (nameFlow || userNameFlow) return; // another first-chat flow is live — never overlap
+        nameFlow = "choice";
+        botSay(nameQuestionText(lang), ["TazAI is fine", "Give a new name"]);
       }, delay || 2100);
     }
     // After the name question settles, the nickname question follows
@@ -2289,7 +2308,7 @@
     function resetSessionState() {
       hideTyping();
       chat.innerHTML = "";
-      game = null; riddleState = null; docFlow = null; msgFlow = null; imageFlow = false; nameFlow = null; userNameFlow = false;
+      game = null; riddleState = null; docFlow = null; msgFlow = null; imageFlow = false; explainFlow = false; nameFlow = null; userNameFlow = false;
       applyMemoryName(); // the visitor's name survives via personal memory
       msgQueue = [];
       updateQueueNote();
@@ -3644,16 +3663,29 @@
     function extractPhotoName(text) {
       var t = (text || "").trim();
       if (!t || t.length > 120) return null;
+      // ONLY an explicit photo request may trigger the photo finder. A chip
+      // label or a task request is never a photo request — this guard is
+      // what stops "Explain a topic" (and every other chip) here for good.
+      if (isChipLabel(t)) return null;
       if (/(prompt|thumbnail|logo|poster|banner|design|ডিজাইন|edit|এডিট)/i.test(t)) return null; // design work, not a person
-      var m = t.match(/(?:photo|picture|pic|image)\s+of\s+(.+)$/i);
-      if (!m) m = t.match(/(?:show|give|send|dekhao|দেখাও)[^.!?]{0,20}?(?:photo|picture|pic|image|ছবি|chobi)\s*(?:of\s+)?(.+)$/i);
-      if (!m) m = t.match(/^(.+?)(?:\s+er|\s+yer)?(?:\s+(?:ekta|ekti|akta|one))?\s*(?:chobi|photo|picture|pic|image)\b/i);
+      // The photo word must be a STANDALONE word (\b before it). Without
+      // that boundary, the "pic" inside "topic" matched as a photo request:
+      // "Explain a topic" was read as a photo of "Explain a to", and the
+      // Wikipedia search fuzzy-matched the song "Hard to Explain" — the
+      // exact random photo the user reported. \b makes that impossible:
+      // in "topic" there is no word boundary before "pic".
+      var m = t.match(/\b(?:photo|picture|pic|image)\s+of\s+(.+)$/i);
+      if (!m) m = t.match(/(?:show|give|send|dekhao|দেখাও)[^.!?]{0,20}?(?:\b(?:photo|picture|pic|image|chobi)\b|ছবি)\s*(?:of\s+)?(.+)$/i);
+      if (!m) m = t.match(/^(.+?)(?:\s+er|\s+yer)?(?:\s+(?:ekta|ekti|akta|one))?\s*(?:\b(?:chobi|photo|picture|pic|image)\b|ছবি)/i);
       if (!m) m = t.match(/^([\u0980-\u09FF][\u0980-\u09FF\s]{1,60}?)(?:ের)?\s*ছবি/);
       if (!m) return null;
       var name = cleanPhotoName(m[1]);
       if (!name || name.length < 2) return null;
       if (/^(my|amar|tomar|his|her|their|our|nijer|ekta|ekti|the|a|an|photo|picture|pic|image|chobi|celebrity|actor|actress|singer|player|famous|person|আমার|তোমার|তার|নিজের|ছবি)$/i.test(name)) return null;
       if (/^(what|who|how|why|when|where)\b/i.test(name)) return null;
+      // A task/topic word in the "name" means this was a work request that
+      // merely mentions a picture — not a person's photo.
+      if (/\b(explain|topic|essay|assignment|homework|study|math|maths|code|coding|email|cv|resume|script|seo|translate|document|summary|summarize|plan|tips)\b/i.test(name)) return null;
       return name;
     }
     function wikiJson(url, timeoutMs) {
@@ -3692,7 +3724,11 @@
       if (!q.length || !t.length) return false;
       var hit = 0;
       for (var i = 0; i < q.length; i++) if (t.indexOf(q[i]) !== -1) hit++;
-      return hit >= Math.ceil(q.length / 2);
+      // Stricter than "half the words": a two-word name needs BOTH words in
+      // the article title, so a loose search hit can never pass as the
+      // requested person on one shared word alone.
+      if (q.length === 1) return hit >= 1;
+      return hit >= Math.max(2, Math.ceil(q.length * 0.6));
     }
     // Bengali শ / স / ষ are the classic same-sound spelling variants ("শাকিব"
     // typed for "সাকিব"). Try them as alternate spellings of the SAME name —
@@ -4057,6 +4093,24 @@
       }
       var qCur = parseCurrencyQuery(next);
       if (qCur) { startCurrency(qCur, resolveLang(next)); return; }
+      // Queued messages keep the same routing as fresh ones: a queued
+      // chip is answered by the built-in brain, and a queued reply to
+      // "Which topic?" explains that topic — never a photo, never Gemini
+      // improvising on a canned label.
+      if (explainFlow && !isChipLabel(next)) {
+        explainFlow = false;
+        if (hasGemini()) { sendToGemini("Explain this topic simply and clearly, step by step, with a short example at the end: " + next); return; }
+        researchThenAnswer(next, brain("What is " + next + "?"));
+        return;
+      }
+      if (isChipLabel(next)) {
+        explainFlow = /^explain/i.test(next);
+        var cr = brain(next);
+        if (cr.hard && !hasGemini()) { researchThenAnswer(next, cr); return; }
+        botSay(cr.text, cr.buttons, cr.link);
+        setTimeout(drainQueue, 1700);
+        return;
+      }
       var bb = !!game || !!riddleState || !!docFlow || !!msgFlow || wantsBangla(next) || wantsEnglish(next) || wantsBanglish(next) || /\bmuse\b|মিউজ/i.test(next) || MEMORY_INTENT.test(next) || STYLE_INTENT.test(next) || TIMER_INTENT.test(next) || MSG_INTENT.test(next);
       if (bb) {
         var r = brain(next);
@@ -4082,12 +4136,19 @@
         hideTyping();
         geminiBusy = false;
         sendBtn.disabled = false;
-        var reason = (err && err.message) ? err.message : "Gemini-তে সমস্যা হয়েছে।";
+        // Graceful fallback — the visitor never sees a raw error, a 429
+        // notice, or an apology preamble. A factual question (the brain
+        // flags it hard, or it is plainly a question) is researched live
+        // across the whole web with sources; anything else is answered
+        // seamlessly by the built-in brain, exactly as if built-in mode
+        // had answered in the first place.
         var res = brain(clean);
-        // A factual question must never dead-end just because Gemini
-        // failed — research it live from Wikipedia instead, with source.
-        if (res.hard) { researchThenAnswer(clean, res); return; }
-        addMsg(reason + "\n\n— আপাতত বিল্ট-ইন মোডে উত্তর দিচ্ছি:\n\n" + res.text, "bot", res.buttons);
+        var factualQ = res.hard || /\?\s*$/.test(clean)
+          || /^(who|what|when|where|which|why|how)\b/i.test(clean)
+          || /(কে|কী|কখন|কবে|কোথায়|কেন)/.test(clean)
+          || /^(ke|ki|kokhon|kobe|kothay|keno|kivabe)\b/i.test(clean);
+        if (factualQ) { researchThenAnswer(clean, res); return; }
+        addMsg(res.text, "bot", res.buttons);
         input.focus();
         drainQueue();
       });
@@ -4182,8 +4243,8 @@
           geminiBusy = false;
           sendBtn.disabled = false;
           if (attachBtnEl) attachBtnEl.disabled = false;
-          var reason = (err && err.message) ? err.message : "Gemini-তে সমস্যা হয়েছে।";
-          addMsg(reason + "\n\nছবিটা বিশ্লেষণ করা যায়নি — অনুমান করে ছবি সম্পর্কে কিছু বানিয়ে বলব না। ইন্টারনেট সংযোগ দেখে ছবিটা আবার পাঠিয়ে দেখো।", "bot");
+          // No raw error text reaches the visitor — one honest line only.
+          addMsg("ছবিটা বিশ্লেষণ করা যায়নি — অনুমান করে ছবি সম্পর্কে কিছু বানিয়ে বলব না। ইন্টারনেট সংযোগ দেখে ছবিটা আবার পাঠিয়ে দেখো।", "bot");
           try { input.focus(); } catch (e) {}
           drainQueue();
         });
@@ -4229,11 +4290,12 @@
           hideTyping();
           geminiBusy = false;
           setDocBusy(false);
-          var reason = (err && err.message) ? err.message : "Gemini-te somossa hoyeche.";
+          // Graceful fallback, no raw error: with extracted text, answer
+          // from the file itself locally; without it, one honest line.
           if (docToSend.text) {
-            addMsg(reason + "\n\n— Gemini diye holo na, tobe file-er lekha theke nijei pore dicchi:\n\n" + localDocReply(docToSend, clean, docLang), "bot");
+            addMsg(localDocReply(docToSend, clean, docLang), "bot");
           } else {
-            addMsg(reason + "\n\nDocument-ta pora jay ni — baniye kichu bolbo na. Internet connection dekhe file-ta abar pathiye dekho.", "bot");
+            addMsg("Document-ta pora jay ni — baniye kichu bolbo na. Internet connection dekhe file-ta abar pathiye dekho.", "bot");
           }
           try { input.focus(); } catch (e) {}
           drainQueue();
@@ -4257,7 +4319,7 @@
       }
       // Image generation: "Draw a sunset…" (or the subject reply after
       // "Draw an image") — a real generated picture, in every mode.
-      if (imageFlow && clean && clean.indexOf("?") === -1 && !/(what can you do|capabilit|help|সাহায্য|stop|cancel|বাদ দাও|থামো)/i.test(clean)) {
+      if (imageFlow && clean && !isChipLabel(clean) && clean.indexOf("?") === -1 && !/(what can you do|capabilit|help|সাহায্য|stop|cancel|বাদ দাও|থামো)/i.test(clean)) {
         imageFlow = false;
         startImageGen(clean, resolveLang(clean));
         return;
@@ -4275,6 +4337,39 @@
       // Live currency conversion with today's real rate.
       var curQ = parseCurrencyQuery(clean);
       if (curQ) { startCurrency(curQ, resolveLang(clean)); return; }
+
+      // "Explain a topic" follow-up: the visitor just named the topic.
+      // Explain THAT topic — in Gemini mode via Gemini with the topic
+      // pinned in the instruction, in built-in mode via live research.
+      // This runs before the photo finder, so a topic can never become
+      // a photo, and the topic is never replaced by a random one.
+      if (explainFlow && !isChipLabel(clean)) {
+        explainFlow = false;
+        if (!/^(stop|cancel|বাদ দাও|থামো)\b/i.test(clean)) {
+          if (hasGemini()) {
+            sendToGemini("Explain this topic simply and clearly, step by step, with a short example at the end: " + clean);
+          } else {
+            researchThenAnswer(clean, brain("What is " + clean + "?"));
+          }
+          return;
+        }
+      }
+      // Quick chips: an exact chip label is ALWAYS answered by the
+      // built-in brain, in both modes — never routed to Gemini (which
+      // could improvise), never to the photo finder, never to image
+      // generation. Each chip's brain branch asks for exactly the one
+      // missing detail (which topic, which code, what to translate…).
+      if (isChipLabel(clean)) {
+        explainFlow = /^explain/i.test(clean); // only the Explain chip arms the topic follow-up
+        sendBtn.disabled = true;
+        setTimeout(function () {
+          var cres = brain(clean);
+          if (cres.hard && !hasGemini()) { researchThenAnswer(clean, cres); return; }
+          botSay(cres.text, cres.buttons, cres.link);
+          setTimeout(function () { sendBtn.disabled = false; try { input.focus(); } catch (e) {} }, 400);
+        }, 250);
+        return;
+      }
 
       // Famous-person photo request: fetch the real photo from Wikipedia in BOTH modes.
       var photoName = (!imageToSend && !docToSend) ? extractPhotoName(clean) : null;
@@ -4606,9 +4701,13 @@
       var startLang = langPref === "bn" ? "bn" : "en";
       if (!userName && !userNameAsked) {
         markUserNameAsked();
-        userNameFlow = true;
+        // Arm the flow only when the question appears (see
+        // askNicknameQuestion) — a message sent before it shows is a
+        // normal message and must be answered normally.
         setTimeout(function () {
-          if (userNameFlow) botSay(userNameQuestionText(startLang));
+          if (userName || nameFlow || userNameFlow) return;
+          userNameFlow = true;
+          botSay(userNameQuestionText(startLang));
         }, 2100);
       } else if (!aiNameAsked) {
         askNicknameQuestion(startLang, 2100);
@@ -4622,7 +4721,7 @@
     /* ================= PWA: service worker + install ================= */
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", function () {
-        navigator.serviceWorker.register("data:application/javascript;base64,LyogVGF6QUkgc2VydmljZSB3b3JrZXIg4oCUIG9mZmxpbmUgc2hlbGwgZm9yIHRoZSBhcHAuCiAgIFNjb3BlIG5vdGU6IHRoaXMgZmlsZSBsaXZlcyB1bmRlciBhc3NldHMvLCBzbyB0aGUgYnJvd3NlciBsaW1pdHMgaXRzCiAgIHNjb3BlIHRvIHRoYXQgZm9sZGVyOyBpdCBzdGlsbCBwcm92aWRlcyB0aGUgZmV0Y2ggaGFuZGxlciBhbmQgY2FjaGVzCiAgIHRoZSBhcHAgaWNvbnMvbWFuaWZlc3QuIEdlbWluaSBBUEkgY2FsbHMgYXJlIG5ldmVyIGNhY2hlZC4gKi8KdmFyIENBQ0hFID0gInRhemFpLXYxOCI7CnZhciBDT1JFID0gWwogICIuL2ljb24tMTkyLnBuZyIsCiAgIi4vaWNvbi01MTIucG5nIiwKICAiLi9pY29uLW1hc2thYmxlLTUxMi5wbmciLAogICIuL2FwcGxlLXRvdWNoLWljb24ucG5nIiwKICAiLi9wcm9maWxlLnBuZyIsCiAgIi4vZmFjZS5wbmciLAogICIuL21hbmlmZXN0LndlYm1hbmlmZXN0IgpdOwoKc2VsZi5hZGRFdmVudExpc3RlbmVyKCJpbnN0YWxsIiwgZnVuY3Rpb24gKGV2ZW50KSB7CiAgZXZlbnQud2FpdFVudGlsKAogICAgY2FjaGVzLm9wZW4oQ0FDSEUpLnRoZW4oZnVuY3Rpb24gKGNhY2hlKSB7IHJldHVybiBjYWNoZS5hZGRBbGwoQ09SRSk7IH0pLnRoZW4oZnVuY3Rpb24gKCkgeyByZXR1cm4gc2VsZi5za2lwV2FpdGluZygpOyB9KQogICk7Cn0pOwoKc2VsZi5hZGRFdmVudExpc3RlbmVyKCJhY3RpdmF0ZSIsIGZ1bmN0aW9uIChldmVudCkgewogIGV2ZW50LndhaXRVbnRpbCgKICAgIGNhY2hlcy5rZXlzKCkudGhlbihmdW5jdGlvbiAoa2V5cykgewogICAgICByZXR1cm4gUHJvbWlzZS5hbGwoa2V5cy5tYXAoZnVuY3Rpb24gKGspIHsgcmV0dXJuIGsgPT09IENBQ0hFID8gbnVsbCA6IGNhY2hlcy5kZWxldGUoayk7IH0pKTsKICAgIH0pLnRoZW4oZnVuY3Rpb24gKCkgeyByZXR1cm4gc2VsZi5jbGllbnRzLmNsYWltKCk7IH0pCiAgKTsKfSk7CgpzZWxmLmFkZEV2ZW50TGlzdGVuZXIoImZldGNoIiwgZnVuY3Rpb24gKGV2ZW50KSB7CiAgdmFyIHJlcSA9IGV2ZW50LnJlcXVlc3Q7CiAgaWYgKHJlcS5tZXRob2QgIT09ICJHRVQiKSByZXR1cm47CiAgdmFyIHVybCA9IHJlcS51cmwgfHwgIiI7CiAgLy8gTmV2ZXIgdG91Y2ggR2VtaW5pIEFQSSB0cmFmZmljIOKAlCBhbHdheXMgbGl2ZSBmcm9tIHRoZSBuZXR3b3JrLgogIGlmICh1cmwuaW5kZXhPZigiZ2VuZXJhdGl2ZWxhbmd1YWdlLmdvb2dsZWFwaXMuY29tIikgIT09IC0xKSByZXR1cm47CiAgLy8gUGFnZXM6IG5ldHdvcmsgZmlyc3QsIGZhbGwgYmFjayB0byBjYWNoZSB3aGVuIG9mZmxpbmUuCiAgaWYgKHJlcS5tb2RlID09PSAibmF2aWdhdGUiKSB7CiAgICBldmVudC5yZXNwb25kV2l0aCgKICAgICAgZmV0Y2gocmVxKS50aGVuKGZ1bmN0aW9uIChyZXMpIHsKICAgICAgICB2YXIgY29weSA9IHJlcy5jbG9uZSgpOwogICAgICAgIGNhY2hlcy5vcGVuKENBQ0hFKS50aGVuKGZ1bmN0aW9uIChjYWNoZSkgeyBjYWNoZS5wdXQocmVxLCBjb3B5KTsgfSk7CiAgICAgICAgcmV0dXJuIHJlczsKICAgICAgfSkuY2F0Y2goZnVuY3Rpb24gKCkgewogICAgICAgIHJldHVybiBjYWNoZXMubWF0Y2gocmVxKS50aGVuKGZ1bmN0aW9uIChoaXQpIHsgcmV0dXJuIGhpdCB8fCBjYWNoZXMubWF0Y2goIi4uL2luZGV4Lmh0bWwiKTsgfSk7CiAgICAgIH0pCiAgICApOwogICAgcmV0dXJuOwogIH0KICAvLyBTdGF0aWMgYXNzZXRzOiBjYWNoZSBmaXJzdCwgdGhlbiBuZXR3b3JrLgogIGV2ZW50LnJlc3BvbmRXaXRoKAogICAgY2FjaGVzLm1hdGNoKHJlcSkudGhlbihmdW5jdGlvbiAoaGl0KSB7CiAgICAgIGlmIChoaXQpIHJldHVybiBoaXQ7CiAgICAgIHJldHVybiBmZXRjaChyZXEpLnRoZW4oZnVuY3Rpb24gKHJlcykgewogICAgICAgIHZhciBjb3B5ID0gcmVzLmNsb25lKCk7CiAgICAgICAgY2FjaGVzLm9wZW4oQ0FDSEUpLnRoZW4oZnVuY3Rpb24gKGNhY2hlKSB7IGNhY2hlLnB1dChyZXEsIGNvcHkpOyB9KTsKICAgICAgICByZXR1cm4gcmVzOwogICAgICB9KTsKICAgIH0pCiAgKTsKfSk7Cg==").catch(function () { /* install still offered via manifest in supported browsers */ });
+        navigator.serviceWorker.register("data:application/javascript;base64,LyogVGF6QUkgc2VydmljZSB3b3JrZXIg4oCUIG9mZmxpbmUgc2hlbGwgZm9yIHRoZSBhcHAuCiAgIFNjb3BlIG5vdGU6IHRoaXMgZmlsZSBsaXZlcyB1bmRlciBhc3NldHMvLCBzbyB0aGUgYnJvd3NlciBsaW1pdHMgaXRzCiAgIHNjb3BlIHRvIHRoYXQgZm9sZGVyOyBpdCBzdGlsbCBwcm92aWRlcyB0aGUgZmV0Y2ggaGFuZGxlciBhbmQgY2FjaGVzCiAgIHRoZSBhcHAgaWNvbnMvbWFuaWZlc3QuIEdlbWluaSBBUEkgY2FsbHMgYXJlIG5ldmVyIGNhY2hlZC4gKi8KdmFyIENBQ0hFID0gInRhemFpLXYxOSI7CnZhciBDT1JFID0gWwogICIuL2ljb24tMTkyLnBuZyIsCiAgIi4vaWNvbi01MTIucG5nIiwKICAiLi9pY29uLW1hc2thYmxlLTUxMi5wbmciLAogICIuL2FwcGxlLXRvdWNoLWljb24ucG5nIiwKICAiLi9wcm9maWxlLnBuZyIsCiAgIi4vZmFjZS5wbmciLAogICIuL21hbmlmZXN0LndlYm1hbmlmZXN0IgpdOwoKc2VsZi5hZGRFdmVudExpc3RlbmVyKCJpbnN0YWxsIiwgZnVuY3Rpb24gKGV2ZW50KSB7CiAgZXZlbnQud2FpdFVudGlsKAogICAgY2FjaGVzLm9wZW4oQ0FDSEUpLnRoZW4oZnVuY3Rpb24gKGNhY2hlKSB7IHJldHVybiBjYWNoZS5hZGRBbGwoQ09SRSk7IH0pLnRoZW4oZnVuY3Rpb24gKCkgeyByZXR1cm4gc2VsZi5za2lwV2FpdGluZygpOyB9KQogICk7Cn0pOwoKc2VsZi5hZGRFdmVudExpc3RlbmVyKCJhY3RpdmF0ZSIsIGZ1bmN0aW9uIChldmVudCkgewogIGV2ZW50LndhaXRVbnRpbCgKICAgIGNhY2hlcy5rZXlzKCkudGhlbihmdW5jdGlvbiAoa2V5cykgewogICAgICByZXR1cm4gUHJvbWlzZS5hbGwoa2V5cy5tYXAoZnVuY3Rpb24gKGspIHsgcmV0dXJuIGsgPT09IENBQ0hFID8gbnVsbCA6IGNhY2hlcy5kZWxldGUoayk7IH0pKTsKICAgIH0pLnRoZW4oZnVuY3Rpb24gKCkgeyByZXR1cm4gc2VsZi5jbGllbnRzLmNsYWltKCk7IH0pCiAgKTsKfSk7CgpzZWxmLmFkZEV2ZW50TGlzdGVuZXIoImZldGNoIiwgZnVuY3Rpb24gKGV2ZW50KSB7CiAgdmFyIHJlcSA9IGV2ZW50LnJlcXVlc3Q7CiAgaWYgKHJlcS5tZXRob2QgIT09ICJHRVQiKSByZXR1cm47CiAgdmFyIHVybCA9IHJlcS51cmwgfHwgIiI7CiAgLy8gTmV2ZXIgdG91Y2ggR2VtaW5pIEFQSSB0cmFmZmljIOKAlCBhbHdheXMgbGl2ZSBmcm9tIHRoZSBuZXR3b3JrLgogIGlmICh1cmwuaW5kZXhPZigiZ2VuZXJhdGl2ZWxhbmd1YWdlLmdvb2dsZWFwaXMuY29tIikgIT09IC0xKSByZXR1cm47CiAgLy8gUGFnZXM6IG5ldHdvcmsgZmlyc3QsIGZhbGwgYmFjayB0byBjYWNoZSB3aGVuIG9mZmxpbmUuCiAgaWYgKHJlcS5tb2RlID09PSAibmF2aWdhdGUiKSB7CiAgICBldmVudC5yZXNwb25kV2l0aCgKICAgICAgZmV0Y2gocmVxKS50aGVuKGZ1bmN0aW9uIChyZXMpIHsKICAgICAgICB2YXIgY29weSA9IHJlcy5jbG9uZSgpOwogICAgICAgIGNhY2hlcy5vcGVuKENBQ0hFKS50aGVuKGZ1bmN0aW9uIChjYWNoZSkgeyBjYWNoZS5wdXQocmVxLCBjb3B5KTsgfSk7CiAgICAgICAgcmV0dXJuIHJlczsKICAgICAgfSkuY2F0Y2goZnVuY3Rpb24gKCkgewogICAgICAgIHJldHVybiBjYWNoZXMubWF0Y2gocmVxKS50aGVuKGZ1bmN0aW9uIChoaXQpIHsgcmV0dXJuIGhpdCB8fCBjYWNoZXMubWF0Y2goIi4uL2luZGV4Lmh0bWwiKTsgfSk7CiAgICAgIH0pCiAgICApOwogICAgcmV0dXJuOwogIH0KICAvLyBTdGF0aWMgYXNzZXRzOiBjYWNoZSBmaXJzdCwgdGhlbiBuZXR3b3JrLgogIGV2ZW50LnJlc3BvbmRXaXRoKAogICAgY2FjaGVzLm1hdGNoKHJlcSkudGhlbihmdW5jdGlvbiAoaGl0KSB7CiAgICAgIGlmIChoaXQpIHJldHVybiBoaXQ7CiAgICAgIHJldHVybiBmZXRjaChyZXEpLnRoZW4oZnVuY3Rpb24gKHJlcykgewogICAgICAgIHZhciBjb3B5ID0gcmVzLmNsb25lKCk7CiAgICAgICAgY2FjaGVzLm9wZW4oQ0FDSEUpLnRoZW4oZnVuY3Rpb24gKGNhY2hlKSB7IGNhY2hlLnB1dChyZXEsIGNvcHkpOyB9KTsKICAgICAgICByZXR1cm4gcmVzOwogICAgICB9KTsKICAgIH0pCiAgKTsKfSk7Cg==").catch(function () { /* install still offered via manifest in supported browsers */ });
       });
     }
     var deferredInstallPrompt = null;
