@@ -471,6 +471,46 @@
       @media (prefers-color-scheme: dark) { #attachDocBtn:hover { color: var(--brand); } }
       #attachDocBtn svg { width: 22px; height: 22px; }
       #attachDocBtn:disabled { opacity: 0.45; cursor: default; }
+      #micBtn {
+        width: 46px; height: 46px;
+        border: 1.5px solid var(--line); border-radius: 10px;
+        background: var(--surface-2); color: var(--ink);
+        display: grid; place-items: center;
+        cursor: pointer; flex: none;
+      }
+      #micBtn:hover { border-color: var(--brand); color: var(--brand-deep); }
+      @media (prefers-color-scheme: dark) { #micBtn:hover { color: var(--brand); } }
+      #micBtn svg { width: 22px; height: 22px; }
+      #micBtn:disabled { opacity: 0.45; cursor: default; }
+      #micBtn.listening { border-color: var(--danger); color: var(--danger); animation: micPulse 1.1s ease-in-out infinite; }
+      @keyframes micPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(179, 64, 46, 0.35); } 50% { box-shadow: 0 0 0 7px rgba(179, 64, 46, 0); } }
+      @media (prefers-reduced-motion: reduce) { #micBtn.listening { animation: none; } }
+      .bubble .speak-btn {
+        display: inline-flex; align-items: center; gap: 6px;
+        margin-top: 9px;
+        border: 1px solid var(--line); background: var(--surface-2); color: var(--ink-soft);
+        border-radius: 999px; padding: 4px 11px;
+        font: inherit; font-size: 12.5px; font-weight: 600;
+        cursor: pointer;
+      }
+      .bubble .speak-btn:hover { border-color: var(--brand); color: var(--brand-deep); }
+      @media (prefers-color-scheme: dark) { .bubble .speak-btn:hover { color: var(--brand); } }
+      .bubble .speak-btn svg { width: 14px; height: 14px; }
+      .bubble .speak-btn.speaking { border-color: var(--brand); color: var(--brand-deep); }
+      @media (prefers-color-scheme: dark) { .bubble .speak-btn.speaking { color: var(--brand); } }
+      .bubble a.msg-link-btn {
+        display: inline-flex; align-items: center; gap: 7px;
+        margin-top: 10px;
+        background: var(--brand); color: var(--brand-ink);
+        padding: 9px 16px; border-radius: 10px;
+        font: inherit; font-size: 14.5px; font-weight: 700;
+        text-decoration: none; word-break: normal;
+      }
+      .bubble a.msg-link-btn:hover { background: var(--brand-deep); color: var(--brand-ink); }
+      @media (prefers-color-scheme: dark) { .bubble a.msg-link-btn:hover { background: var(--brand); } }
+      #memoryList { margin-top: 12px; font-size: 14.5px; line-height: 1.6; border-radius: 10px; padding: 10px 12px; display: none; background: var(--surface-2); border: 1px solid var(--line); }
+      #memoryList.show { display: block; }
+      #memoryList ul { margin: 6px 0 0; padding-left: 20px; }
       #docPreview {
         display: flex; gap: 10px; align-items: center;
         padding: 8px 14px;
@@ -607,6 +647,14 @@
         <div id="keyStatus" role="status" aria-live="polite"></div>
 
         <div class="privacy-note"><strong>Privacy:</strong> Your key is stored <strong>only in this browser</strong>, on this device. It is never sent to anyone else — it is only used to fetch answers for you from Google's Gemini servers. Without a key, TazAI still works in built-in mode.</div>
+
+        <h3 class="settings-subhead">Memory</h3>
+        <p style="font-size:14px; line-height:1.55; margin:0 0 10px;">TazAI remembers facts you ask it to remember — try saying <strong>“Remember that my exam is on Friday”</strong> in the chat. Memories are saved only in this browser, on this device, and are used in every chat until you clear them.</p>
+        <div class="key-actions">
+          <button class="btn-secondary" id="viewMemoryBtn" type="button">View memory</button>
+          <button class="btn-danger" id="clearMemoryBtn" type="button">Clear memory</button>
+        </div>
+        <div id="memoryList" role="status" aria-live="polite"></div>
       </div>
     </div>
 
@@ -679,6 +727,9 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
         </button>
         <textarea id="input" rows="1" placeholder="Message TazAI…" aria-label="Your message"></textarea>
+        <button id="micBtn" type="button" aria-label="Voice input — tap and speak" title="Voice input — tap and speak">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 19v3"/></svg>
+        </button>
         <button id="send" type="submit" aria-label="Send">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4Z"/></svg>
         </button>
@@ -704,6 +755,8 @@
     var game = null; // {type:'guess', n, tries} or {type:'rps'}
     var riddleState = null; // {a: answer}
     var docFlow = null; // {type: "report"|"assignment"|"application"|"document"} while collecting document details
+    var msgFlow = null; // {channel: "wa"|"email"|"ask", number?, addr?, content?} while preparing a WhatsApp/email message for the user to send
+    var imageFlow = false; // true while waiting for the subject of a "draw an image" request
     var lastJoke = -1, lastQuote = -1, lastFact = -1, lastRiddle = -1;
     var lastSong = -1, lastPoem = -1, lastScript = -1;
 
@@ -713,7 +766,7 @@
     try { geminiKey = (localStorage.getItem(GEMINI_KEY_STORAGE) || "").trim(); } catch (e) { geminiKey = ""; }
     var geminiHistory = []; // [{role:"user"|"model", parts:[{text}]}]
     var geminiBusy = false;
-    var GEMINI_MODELS = ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-flash-latest"];
+    var GEMINI_MODELS = ["gemini-3.5-flash", "gemini-flash-latest", "gemini-3.5-flash-lite"];
     var TAZAI_SYSTEM_PROMPT = [
       "You are TazAI, a friendly, warm and helpful AI assistant. You were CREATED and BUILT by Tazvirul — he is your creator, developer and the owner of this website. You are the user's friendly chat companion (বন্ধু).",
       "CREATOR: If anyone asks who made you / who created you / who built or developed you / তোমাকে কে বানিয়েছে / কে তৈরি করেছে / তোমার নির্মাতা কে — answer clearly and proudly, in the user's language, that Tazvirul created and built you (Bengali: 'আমাকে বানিয়েছেন Tazvirul — তিনিই আমার নির্মাতা ও এই ওয়েবসাইটের মালিক।' / English: 'I was created and built by Tazvirul — he is my creator and the owner of this website.'). Never say Google created you: Google Gemini only powers your AI brain; TazAI itself — this app, its design and personality — was made by Tazvirul.",
@@ -787,7 +840,9 @@
       "3) If you do NOT know the answer, or you are not reasonably sure, DO NOT guess and DO NOT make up an answer. Honestly say so in the user's language (Bengali: 'আমি এটা নিশ্চিতভাবে জানি না, অনুমান করে ভুল উত্তর দিতে চাই না।' / English: 'I don't know this for sure, and I don't want to guess and give you a wrong answer.'), briefly say what part is uncertain, and tell the user where they can reliably check it (which textbook, official website or authority). Admitting you don't know is always better than a confident wrong answer.",
       "4) If only part of the answer is certain, clearly separate what is certain from what is uncertain ('যেটুকু নিশ্চিত...' / 'I am not fully sure about...'). Never present an estimate, rumour or opinion as a confirmed fact.",
       "5) For health, legal, financial or safety-critical questions, add a short note that the user should verify with a qualified professional or official source before acting.",
-      "6) Simple chat, greetings, jokes, stories, games, motivation and personal small talk do NOT need a reference section — keep those light and friendly. References are for hard/factual questions."
+      "6) Simple chat, greetings, jokes, stories, games, motivation and personal small talk do NOT need a reference section — keep those light and friendly. References are for hard/factual questions.",
+      "LIVE WEB SEARCH — ENABLED IN THIS APP: your text answers are grounded with live Google Search results. For factual, current or knowledge questions, USE the search results supplied with this conversation: prefer them over your older training knowledge for anything time-sensitive, quote key facts accurately, and end with the 'Reference:' section naming the actual sources from the search results (with their URLs when provided). If the search results and your training knowledge conflict on a current fact, trust the live search results and note that briefly. Never say you cannot access the internet when search results were provided — in this app, you can.",
+      "APP POWERS — BUILT INTO THIS APP (never deny them): (a) IMAGE GENERATION: when the user asks to draw / paint / generate / create an image, this app generates the picture itself and shows it in the chat — if such a request reaches you as text, respond as the artist: confirm warmly and describe the image concept you are creating for them; (b) FAMOUS-PERSON PHOTOS: the app shows real Wikipedia photos with source links on request; (c) VOICE: the user can speak to you through the microphone button (their device transcribes it) and can tap Listen on your replies to hear them read aloud; (d) PERSONAL MEMORY: facts the user asked TazAI to remember are stored in this browser and given to you under a 'PERSONAL MEMORY' heading when present — use them naturally (their name, studies, plans, preferences) and confirm warmly when the user asks you to remember something new, because the app does save it; (e) LIVE TOOLS in the app: live currency conversion with today's rates, live Wikipedia research in built-in mode, unit conversion and timers — these are handled by the app itself; (f) SENDING MESSAGES: the app drafts WhatsApp and email messages for the user and gives them a ready, prefilled one-tap link (wa.me / mailto) — their own WhatsApp/email app opens with the message filled in and THEY press Send there. Be clear about this: you prepare everything, the final send tap is the user's. NEVER claim you sent a message yourself, and never say messaging is impossible — offer it exactly this way."
     ].join("\n");
     function hasGemini() { return !!geminiKey; }
     function saveGeminiKeyToStorage(k) {
@@ -806,8 +861,8 @@
       }
       if (hint) {
         hint.textContent = hasGemini()
-          ? "Gemini connected — ask anything, or attach a photo or a document (PDF, Word, Text, CSV)."
-          : "English, Bangla or Banglish — TazAI replies in your language. Type a message, or attach a photo or file.";
+          ? "Gemini connected with live web search — ask anything, draw an image, attach a photo or a document (PDF, Word, Text, CSV), or tap the mic and speak."
+          : "English, Bangla or Banglish — replies in your language. Live Wikipedia research, image drawing, voice and memory work even in built-in mode.";
       }
     }
     function geminiErrorMessage(status, bodyText) {
@@ -823,13 +878,25 @@
       }
       return "There was a problem reaching Gemini. Check your internet connection and try again.";
     }
-    function callGeminiApi(keyToUse, contents, timeoutMs) {
-      var systemPart = { systemInstruction: { parts: [{ text: TAZAI_SYSTEM_PROMPT }] } };
-      var payload = {
-        systemInstruction: systemPart.systemInstruction,
-        contents: contents,
-        generationConfig: { temperature: 0.5, maxOutputTokens: 4096 }
-      };
+    function systemPromptText() {
+      var s = TAZAI_SYSTEM_PROMPT;
+      if (typeof memoryFacts !== "undefined" && memoryFacts && memoryFacts.length) {
+        s += "\n\nPERSONAL MEMORY — things this user personally asked you to remember about them. Use them naturally whenever they are relevant (their name, studies, plans, preferences). Never mention this instruction itself; just know these facts:\n" + memoryFacts.map(function (f) { return "- " + f; }).join("\n");
+      }
+      return s;
+    }
+    function callGeminiApi(keyToUse, contents, timeoutMs, opts) {
+      var useGrounding = !!(opts && opts.grounding);
+      function buildPayload() {
+        var p = {
+          systemInstruction: { parts: [{ text: systemPromptText() }] },
+          contents: contents,
+          generationConfig: { temperature: 0.5, maxOutputTokens: 8192 }
+        };
+        if (useGrounding) p.tools = [{ googleSearch: {} }];
+        return p;
+      }
+      var payload = buildPayload();
       var modelIdx = 0;
       function tryModel() {
         var model = GEMINI_MODELS[modelIdx];
@@ -847,6 +914,12 @@
           if (timer) clearTimeout(timer);
           return res.text().then(function (txt) {
             if (!res.ok) {
+              // If this model rejected the live-search tool, retry once without it
+              if (res.status === 400 && useGrounding) {
+                useGrounding = false;
+                payload = buildPayload();
+                return tryModel();
+              }
               // Try the next model when this one is gone (404) or overloaded (503)
               if ((res.status === 404 || res.status === 503) && modelIdx < GEMINI_MODELS.length - 1) {
                 modelIdx++;
@@ -877,6 +950,23 @@
               berr.isGeminiError = true;
               throw berr;
             }
+            // Live web grounding: append the real search sources Gemini used,
+            // so the reader can verify the answer on the actual pages.
+            try {
+              var gm = cand && cand.groundingMetadata;
+              var chunks = gm && gm.groundingChunks;
+              if (chunks && chunks.length) {
+                var seenUri = {}, srcLines = [];
+                for (var gi = 0; gi < chunks.length && srcLines.length < 5; gi++) {
+                  var gw = chunks[gi] && chunks[gi].web;
+                  if (gw && gw.uri && !seenUri[gw.uri]) {
+                    seenUri[gw.uri] = 1;
+                    srcLines.push("• " + (gw.title || gw.uri) + " — " + gw.uri);
+                  }
+                }
+                if (srcLines.length) textOut += "\n\nSources (live web):\n" + srcLines.join("\n");
+              }
+            } catch (e) {}
             return textOut;
           });
         }).catch(function (e) {
@@ -905,7 +995,7 @@
         ? "[Language choice: the user is writing in Banglish (romanized Bengali) — reply in Banglish only: Bengali words in Latin/English letters, no Bengali script.] "
         : "[Language choice: reply in English unless the user asks for Bengali or Banglish.] ";
       contents.push({ role: "user", parts: [{ text: langNote + userText }] });
-      callGeminiApi(geminiKey, contents, 30000).then(function (reply) {
+      callGeminiApi(geminiKey, contents, 30000, { grounding: true }).then(function (reply) {
         geminiHistory.push({ role: "user", parts: [{ text: userText }] });
         geminiHistory.push({ role: "model", parts: [{ text: reply }] });
         // Keep last 30 turns (60 messages) so TazAI remembers more of the conversation
@@ -1325,6 +1415,41 @@
         });
         b.appendChild(wrap);
       }
+      if (who === "bot" && text && "speechSynthesis" in window) {
+        var speakBtn = document.createElement("button");
+        speakBtn.type = "button";
+        speakBtn.className = "speak-btn";
+        speakBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9.4 9.4 0 0 1 0 13"/></svg><span>Listen</span>';
+        speakBtn.setAttribute("aria-label", "Listen to this reply");
+        (function (btn, spokenText) {
+          btn.addEventListener("click", function () {
+            try {
+              var synth = window.speechSynthesis;
+              if (btn.classList.contains("speaking")) { synth.cancel(); btn.classList.remove("speaking"); return; }
+              synth.cancel();
+              var cleanText = spokenText.replace(/\*\*/g, "").replace(/`([^`]*)`/g, "$1").replace(/https?:\/\/\S+/g, "link").replace(/\s+/g, " ").trim().slice(0, 1800);
+              if (!cleanText) return;
+              var u = new SpeechSynthesisUtterance(cleanText);
+              u.lang = /[\u0980-\u09FF]/.test(cleanText) ? "bn-BD" : "en-US";
+              u.rate = 1;
+              btn.classList.add("speaking");
+              u.onend = function () { btn.classList.remove("speaking"); };
+              u.onerror = function () { btn.classList.remove("speaking"); };
+              synth.speak(u);
+            } catch (e) {}
+          });
+        })(speakBtn, text);
+        b.appendChild(speakBtn);
+      }
+      if (opts && opts.link && opts.link.href) {
+        var linkBtn = document.createElement("a");
+        linkBtn.className = "msg-link-btn";
+        linkBtn.href = opts.link.href;
+        linkBtn.target = "_blank";
+        linkBtn.rel = "noopener noreferrer";
+        linkBtn.textContent = opts.link.label || "Open";
+        b.appendChild(linkBtn);
+      }
       row.appendChild(av);
       row.appendChild(b);
       chat.appendChild(row);
@@ -1371,12 +1496,12 @@
         ["Researching the topic…", "Cross-checking multiple sources…", "Writing the answer…"],
         ["Bishoy-ta niye gobeshona korchi…", "Ekadhik source miliye jachai korchi…", "Uttor likhchi…"]);
     }
-    function botSay(text, buttons) {
+    function botSay(text, buttons, link) {
       showTyping();
       var delay = Math.min(500 + text.length * 6, 1500);
       setTimeout(function () {
         hideTyping();
-        addMsg(text, "bot", buttons);
+        addMsg(text, "bot", buttons, null, null, link ? { link: link } : null);
       }, delay);
     }
 
@@ -1433,6 +1558,7 @@
       var rec = { w: who, t: text || "", time: timeStr || "" };
       if (imageUrl) rec.img = imageUrl;
       if (fileInfo) rec.file = { name: fileInfo.name || "Document", size: fileInfo.size || 0, kind: fileInfo.kind || "" };
+      if (opts && opts.link) rec.link = opts.link;
       liveMessages.push(rec);
       if (liveMessages.length > 300) liveMessages.splice(0, liveMessages.length - 300);
       if (who === "user" && !activeChatId) {
@@ -1559,7 +1685,8 @@
     function resetSessionState() {
       hideTyping();
       chat.innerHTML = "";
-      game = null; riddleState = null; docFlow = null; userName = "";
+      game = null; riddleState = null; docFlow = null; msgFlow = null; imageFlow = false;
+      applyMemoryName(); // the visitor's name survives via personal memory
       msgQueue = [];
       updateQueueNote();
       preferredLang = "en"; // a fresh or reopened chat starts in English; the language then follows each message automatically
@@ -1590,7 +1717,7 @@
       note.textContent = EN_DAYS[d.getDay()] + ", " + EN_MONTHS[d.getMonth()] + " " + d.getDate() + ", " + d.getFullYear();
       chat.appendChild(note);
       conv.messages.forEach(function (m) {
-        addMsg(m.t, m.w, null, m.img || null, m.file || null, { time: m.time || "", restore: true });
+        addMsg(m.t, m.w, null, m.img || null, m.file || null, { time: m.time || "", restore: true, link: m.link || null });
       });
       geminiHistory = [];
       conv.messages.forEach(function (m) {
@@ -1618,6 +1745,41 @@
     document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeSidebarMobile(); });
     var sideNewBtn = document.getElementById("sideNewChat");
     if (sideNewBtn) sideNewBtn.addEventListener("click", startNewChat);
+
+    /* ================= Personal memory (saved in this browser) =================
+       Facts the visitor asks TazAI to remember ("Remember that my exam is on
+       Friday"). They persist across chats on this device, are shown back on
+       request, can be cleared in Settings or by saying "forget everything",
+       and are included in every Gemini call so the AI actually knows them. */
+    var MEMORY_KEY = "tazai_memory_v1";
+    var memoryFacts = loadMemory();
+    function loadMemory() {
+      try {
+        var a = JSON.parse(localStorage.getItem(MEMORY_KEY) || "[]");
+        if (!a || Object.prototype.toString.call(a) !== "[object Array]") return [];
+        return a.filter(function (f) { return typeof f === "string" && f.trim(); }).slice(0, 40);
+      } catch (e) { return []; }
+    }
+    function saveMemory() {
+      try { localStorage.setItem(MEMORY_KEY, JSON.stringify(memoryFacts.slice(0, 40))); } catch (e) {}
+    }
+    function rememberFact(f) {
+      f = (f || "").replace(/\s+/g, " ").trim();
+      if (!f) return false;
+      for (var i = 0; i < memoryFacts.length; i++) if (memoryFacts[i].toLowerCase() === f.toLowerCase()) return true;
+      memoryFacts.push(f);
+      if (memoryFacts.length > 40) memoryFacts.shift();
+      saveMemory();
+      return true;
+    }
+    function forgetMemory() { memoryFacts = []; saveMemory(); }
+    function applyMemoryName() {
+      for (var i = 0; i < memoryFacts.length; i++) {
+        var m = memoryFacts[i].match(/^User's name is (.+)$/i) || memoryFacts[i].match(/^The user's name is (.+)$/i);
+        if (m) { userName = m[1]; return; }
+      }
+    }
+    applyMemoryName();
 
     /* ================= Language detect ================= */
     /* Banglish = Bengali written in English/Latin letters (romanized Bengali),
@@ -1786,6 +1948,42 @@
       } catch (e) { return null; }
     }
 
+    /* ================= Unit converter ================= */
+    var UNIT_DEFS = {
+      km: { kind: "len", f: 1000, label: "km" }, kilometer: { kind: "len", f: 1000, label: "km" }, kilometers: { kind: "len", f: 1000, label: "km" },
+      m: { kind: "len", f: 1, label: "m" }, meter: { kind: "len", f: 1, label: "m" }, meters: { kind: "len", f: 1, label: "m" }, metre: { kind: "len", f: 1, label: "m" }, metres: { kind: "len", f: 1, label: "m" },
+      cm: { kind: "len", f: 0.01, label: "cm" }, centimeter: { kind: "len", f: 0.01, label: "cm" }, centimeters: { kind: "len", f: 0.01, label: "cm" },
+      mile: { kind: "len", f: 1609.344, label: "miles" }, miles: { kind: "len", f: 1609.344, label: "miles" }, mi: { kind: "len", f: 1609.344, label: "miles" },
+      inch: { kind: "len", f: 0.0254, label: "inches" }, inches: { kind: "len", f: 0.0254, label: "inches" },
+      feet: { kind: "len", f: 0.3048, label: "feet" }, foot: { kind: "len", f: 0.3048, label: "feet" }, ft: { kind: "len", f: 0.3048, label: "feet" },
+      kg: { kind: "mass", f: 1000, label: "kg" }, kilogram: { kind: "mass", f: 1000, label: "kg" }, kilograms: { kind: "mass", f: 1000, label: "kg" },
+      g: { kind: "mass", f: 1, label: "g" }, gram: { kind: "mass", f: 1, label: "g" }, grams: { kind: "mass", f: 1, label: "g" },
+      lb: { kind: "mass", f: 453.59237, label: "lb" }, lbs: { kind: "mass", f: 453.59237, label: "lb" }, pound: { kind: "mass", f: 453.59237, label: "lb" }, pounds: { kind: "mass", f: 453.59237, label: "lb" },
+      liter: { kind: "vol", f: 1, label: "litres" }, liters: { kind: "vol", f: 1, label: "litres" }, litre: { kind: "vol", f: 1, label: "litres" }, litres: { kind: "vol", f: 1, label: "litres" }, l: { kind: "vol", f: 1, label: "litres" },
+      ml: { kind: "vol", f: 0.001, label: "ml" },
+      gallon: { kind: "vol", f: 3.785411784, label: "gallons" }, gallons: { kind: "vol", f: 3.785411784, label: "gallons" }, gal: { kind: "vol", f: 3.785411784, label: "gallons" },
+      celsius: { kind: "temp", label: "°C" }, centigrade: { kind: "temp", label: "°C" }, fahrenheit: { kind: "temp", label: "°F" }
+    };
+    function normUnit(u) {
+      u = (u || "").toLowerCase();
+      if (u === "°c" || u === "c") return "celsius";
+      if (u === "°f" || u === "f") return "fahrenheit";
+      return u;
+    }
+    function convertUnits(v, fromRaw, toRaw) {
+      var from = UNIT_DEFS[normUnit(fromRaw)], to = UNIT_DEFS[normUnit(toRaw)];
+      if (!from || !to || from.kind !== to.kind) return null;
+      var out;
+      if (from.kind === "temp") {
+        var c = normUnit(fromRaw) === "fahrenheit" ? (v - 32) * 5 / 9 : v;
+        out = normUnit(toRaw) === "fahrenheit" ? c * 9 / 5 + 32 : c;
+      } else {
+        out = v * from.f / to.f;
+      }
+      var rounded = Math.abs(out) >= 100 ? Math.round(out * 100) / 100 : Math.round(out * 10000) / 10000;
+      return { value: rounded, fromLabel: (normUnit(fromRaw) === "celsius" ? "°C" : normUnit(fromRaw) === "fahrenheit" ? "°F" : from.label), toLabel: to.label };
+    }
+
     /* ================= Content pools ================= */
     var JOKES = [
       "শিক্ষক: বলো তো, ৪ আর ৪ যোগ করলে কত হয়?\nছাত্র: স্যার, আগের অঙ্কটা এখনো হয়নি, এরই মধ্যে আরেকটা দিয়ে দিলেন!",
@@ -1881,9 +2079,9 @@
 
     function helpText(lang) {
       return L(lang,
-        "আমি যা যা করতে পারি — শুধু বললেই হবে:\n\n• **পড়াশোনা ও পরীক্ষা** — যেকোনো বিষয় সহজ ব্যাখ্যা, অঙ্ক/পদার্থ/রসায়ন/জীববিজ্ঞান সমাধান, নোট, MCQ, মক টেস্ট, ফ্ল্যাশকার্ড, Study Plan, Revision Plan, IELTS ও ভর্তি প্রস্তুতি\n• **প্রোগ্রামিং** — Python, JavaScript, C, C++, Java, PHP, SQL, React, Node: কোড লেখা, Debug, ব্যাখ্যা, প্রজেক্ট, Roadmap\n• **ওয়েবসাইট** — সম্পূর্ণ Website, Portfolio, E-commerce, Dashboard; Hosting, Deployment, SEO, Bug Fix\n• **AI ও অটোমেশন** — Chatbot, AI Agent, Prompt Engineering, API Integration, n8n/Make/Zapier অটোমেশন\n• **ছবি ও ডিজাইন** — Thumbnail, Logo, Poster, Banner-এর পূর্ণাঙ্গ Concept আর তৈরি Image Prompt\n• **ভিডিও ও কনটেন্ট** — YouTube/Shorts Script, Hook, Subtitle, Title, Tags, SEO, Content Calendar\n• **রিসার্চ** — যেকোনো বিষয়ে গবেষণা, তুলনা, বিশ্ববিদ্যালয়/চাকরি/Scholarship তথ্য, সূত্রসহ রিপোর্ট\n• **লেখা** — Email, CV, Cover Letter, Assignment, প্রবন্ধ, আবেদন, Post, গল্প, গান, কবিতা\n• **ডেটা ও হিসাব** — Excel/Sheets Formula, CSV বিশ্লেষণ, Chart, Statistics, Budget, EMI, যেকোনো অঙ্ক (লিখো: 25 * 4 + 10)\n• **ডকুমেন্ট** — ফাইল attach করো (PDF, Word, Text, CSV): সারাংশ, প্রশ্নের উত্তর, তথ্য খোঁজা\n• **ছবি বোঝা** — ছবি পাঠালে দেখে বলব, লেখা পড়ে দেব, প্রশ্ন সমাধান করব (Gemini মোডে); বিখ্যাত মানুষের নাম বললে তার আসল ছবি সূত্রসহ দেখিয়ে দিই\n• **ব্যবসা ও ফ্রিল্যান্সিং** — Fiverr/Upwork Profile, Gig, Proposal, Business Plan, Marketing\n• **SEO ও মার্কেটিং** — Keyword Research, On-page/Off-page SEO, YouTube SEO, Growth Strategy\n• **সিভিল ইঞ্জিনিয়ারিং** — Mechanics, Surveying, Concrete, Estimation, BOQ, AutoCAD গাইড\n• **কম্পিউটার সাহায্য** — Windows, PC সমস্যা, Hardware পছন্দ, Linux, Networking\n• **সাইবার সিকিউরিটি** — নিরাপত্তার বেসিক, Phishing চেনা, Password, নিজের সাইট নিরাপদ রাখা\n• **প্ল্যানিং** — Daily/Weekly Routine, Goal, Habit, Career ও Learning Roadmap\n• **ভ্রমণ** — Itinerary, Budget Trip Plan, ভিসা ও বিদেশে পড়াশোনার গাইড\n• **ভাষা** — English/বাংলা শেখা, Speaking Practice, অনুবাদ (English ↔ বাংলা ↔ Banglish)\n• **ফাইন্যান্স** — Budget, Savings Plan, Loan ও EMI হিসাব, লাভ-ক্ষতি\n• **মজা** — জোক, গল্প, ধাঁধা, গেম (সংখ্যা অনুমান, পাথর-কাগজ-কাঁচি)\n• **রেফারেন্স** — তথ্যভিত্তিক উত্তরের শেষে সূত্র থাকে; উত্তর দেওয়ার আগে একাধিক সূত্র মিলিয়ে যাচাই করি\n• **Tazvirul-এর Facebook:** https://www.facebook.com/tazvirul96\n\nযেকোনো একটা লিখে পাঠাও — যেমন 'Study plan বানাও', 'CV লিখে দাও', 'SEO tips' — অথবা Settings থেকে ফ্রি Gemini Key বসালে প্রতিটা বিষয়ে পূর্ণ AI শক্তি পাবে।",
-        "Everything I can do — just ask:\n\n• **Study & exams** — explain any topic simply, solve math/physics/chemistry/biology problems, notes, MCQs, mock tests, flashcards, study plans, revision plans, IELTS and admission prep\n• **Programming** — Python, JavaScript, C, C++, Java, PHP, SQL, React, Node: write, debug and explain code, projects, roadmaps\n• **Websites** — complete websites, portfolios, e-commerce, dashboards; hosting, deployment, SEO, bug fixes\n• **AI & automation** — chatbots, AI agents, prompt engineering, API integration, n8n/Make/Zapier automation\n• **Images & design** — thumbnail, logo, poster and banner concepts with ready-to-use image prompts\n• **Video & content** — YouTube/Shorts scripts, hooks, subtitles, titles, tags, SEO, content calendars\n• **Research** — any topic, comparisons, universities, jobs, scholarships, reports with sources\n• **Writing** — emails, CVs, cover letters, assignments, essays, applications, posts, stories, songs, poems\n• **Data & maths** — Excel/Sheets formulas, CSV analysis, charts, statistics, budgets, EMI, any calculation (try: 25 * 4 + 10)\n• **Documents** — attach a file (PDF, Word, Text, CSV): summary, answers, key information\n• **Photos** — send a photo: I'll describe it, read its text, solve what's in it (Gemini mode); name a famous person and I'll show their real photo with its source\n• **Business & freelancing** — Fiverr/Upwork profiles, gigs, proposals, business plans, marketing\n• **SEO & marketing** — keyword research, on-page/off-page SEO, YouTube SEO, growth strategy\n• **Civil engineering** — mechanics, surveying, concrete, estimation, BOQ, AutoCAD guidance\n• **Computer help** — Windows, PC problems, hardware choices, Linux, networking\n• **Cybersecurity** — security basics, spotting phishing, passwords, keeping your own site safe\n• **Planning** — daily/weekly routines, goals, habits, career and learning roadmaps\n• **Travel** — itineraries, budget trip plans, visa and study-abroad guidance\n• **Language** — English/Bangla teaching, speaking practice, translation (English ↔ Bengali ↔ Banglish)\n• **Finance** — budgets, savings plans, loan & EMI calculations, profit-loss\n• **Fun** — jokes, stories, riddles, games (number guessing, rock-paper-scissors)\n• **References** — factual answers end with a source, cross-checked across multiple sources first\n• **Tazvirul's Facebook:** https://www.facebook.com/tazvirul96\n\nType any of these — 'Make me a study plan', 'Write my CV', 'SEO tips' — or connect the free Gemini key in Settings for full AI power on every topic.",
-        "Ami ja ja korte pari — shudhu bollei hobe:\n\n• **Porashona o porikkha** — jekono bishoy sohoj byakkha, onko/physics/chemistry/biology somadhan, note, MCQ, mock test, flashcard, study plan, revision plan, IELTS o vorti prostuti\n• **Programming** — Python, JavaScript, C, C++, Java, PHP, SQL, React, Node: code lekha, debug, byakkha, project, roadmap\n• **Website** — sompurno website, portfolio, e-commerce, dashboard; hosting, deployment, SEO, bug fix\n• **AI o automation** — chatbot, AI agent, prompt engineering, API integration, n8n/Make/Zapier automation\n• **Chobi o design** — thumbnail, logo, poster, banner-er purnango concept ar toiri image prompt\n• **Video o content** — YouTube/Shorts script, hook, subtitle, title, tags, SEO, content calendar\n• **Research** — jekono bishoye gobeshona, tulona, university/chakri/scholarship tottho, source shoho report\n• **Lekha** — email, CV, cover letter, assignment, probondho, abedon, post, golpo, gaan, kobita\n• **Data o hishab** — Excel/Sheets formula, CSV bishleshon, chart, statistics, budget, EMI, jekono onko (likho: 25 * 4 + 10)\n• **Document** — file attach koro (PDF, Word, Text, CSV): sarangsho, proshner uttor, tottho khoja\n• **Chobi bojha** — chobi pathale dekhe bolbo, lekha pore debo, proshno somadhan korbo (Gemini mode-e); bikhyato manusher nam bolle tar asol chobi source shoho dekhiye di\n• **Business o freelancing** — Fiverr/Upwork profile, gig, proposal, business plan, marketing\n• **SEO o marketing** — keyword research, on-page/off-page SEO, YouTube SEO, growth strategy\n• **Civil engineering** — mechanics, surveying, concrete, estimation, BOQ, AutoCAD guide\n• **Computer sahajjo** — Windows, PC somossa, hardware pochondo, Linux, networking\n• **Cyber security** — nirapottar basic, phishing chena, password, nijer site nirapod rakha\n• **Planning** — daily/weekly routine, goal, habit, career o learning roadmap\n• **Vromon** — itinerary, budget trip plan, visa o bideshe porashonar guide\n• **Vasha** — English/Bangla shekha, speaking practice, onubad (English ↔ Bangla ↔ Banglish)\n• **Finance** — budget, savings plan, loan o EMI hishab, lav-khoti\n• **Moja** — joke, golpo, dhadha, game (sonkhya onuman, pathor-kagoj-kanchi)\n• **Reference** — tottho-vittik uttorer sheshe source thake; uttor deyar age ekadhik source miliye jachai kori\n• **Tazvirul-er Facebook:** https://www.facebook.com/tazvirul96\n\nJekono ekta likhe pathao — jemon 'Study plan banao', 'CV likhe dao', 'SEO tips' — othoba Settings theke free Gemini Key boshale protita bishoye purno AI shokti pabe.");
+        "আমি যা যা করতে পারি — শুধু বললেই হবে:\n\n• **পড়াশোনা ও পরীক্ষা** — যেকোনো বিষয় সহজ ব্যাখ্যা, অঙ্ক/পদার্থ/রসায়ন/জীববিজ্ঞান সমাধান, নোট, MCQ, মক টেস্ট, ফ্ল্যাশকার্ড, Study Plan, Revision Plan, IELTS ও ভর্তি প্রস্তুতি\n• **প্রোগ্রামিং** — Python, JavaScript, C, C++, Java, PHP, SQL, React, Node: কোড লেখা, Debug, ব্যাখ্যা, প্রজেক্ট, Roadmap\n• **ওয়েবসাইট** — সম্পূর্ণ Website, Portfolio, E-commerce, Dashboard; Hosting, Deployment, SEO, Bug Fix\n• **AI ও অটোমেশন** — Chatbot, AI Agent, Prompt Engineering, API Integration, n8n/Make/Zapier অটোমেশন\n• **ছবি ও ডিজাইন** — Thumbnail, Logo, Poster, Banner-এর পূর্ণাঙ্গ Concept আর তৈরি Image Prompt\n• **ভিডিও ও কনটেন্ট** — YouTube/Shorts Script, Hook, Subtitle, Title, Tags, SEO, Content Calendar\n• **রিসার্চ** — যেকোনো বিষয়ে গবেষণা, তুলনা, বিশ্ববিদ্যালয়/চাকরি/Scholarship তথ্য, সূত্রসহ রিপোর্ট\n• **লেখা** — Email, CV, Cover Letter, Assignment, প্রবন্ধ, আবেদন, Post, গল্প, গান, কবিতা\n• **ডেটা ও হিসাব** — Excel/Sheets Formula, CSV বিশ্লেষণ, Chart, Statistics, Budget, EMI, যেকোনো অঙ্ক (লিখো: 25 * 4 + 10)\n• **ডকুমেন্ট** — ফাইল attach করো (PDF, Word, Text, CSV): সারাংশ, প্রশ্নের উত্তর, তথ্য খোঁজা\n• **ছবি বোঝা** — ছবি পাঠালে দেখে বলব, লেখা পড়ে দেব, প্রশ্ন সমাধান করব (Gemini মোডে); বিখ্যাত মানুষের নাম বললে তার আসল ছবি সূত্রসহ দেখিয়ে দিই\n• **ব্যবসা ও ফ্রিল্যান্সিং** — Fiverr/Upwork Profile, Gig, Proposal, Business Plan, Marketing\n• **SEO ও মার্কেটিং** — Keyword Research, On-page/Off-page SEO, YouTube SEO, Growth Strategy\n• **সিভিল ইঞ্জিনিয়ারিং** — Mechanics, Surveying, Concrete, Estimation, BOQ, AutoCAD গাইড\n• **কম্পিউটার সাহায্য** — Windows, PC সমস্যা, Hardware পছন্দ, Linux, Networking\n• **সাইবার সিকিউরিটি** — নিরাপত্তার বেসিক, Phishing চেনা, Password, নিজের সাইট নিরাপদ রাখা\n• **প্ল্যানিং** — Daily/Weekly Routine, Goal, Habit, Career ও Learning Roadmap\n• **ভ্রমণ** — Itinerary, Budget Trip Plan, ভিসা ও বিদেশে পড়াশোনার গাইড\n• **ভাষা** — English/বাংলা শেখা, Speaking Practice, অনুবাদ (English ↔ বাংলা ↔ Banglish)\n• **ফাইন্যান্স** — Budget, Savings Plan, Loan ও EMI হিসাব, লাভ-ক্ষতি\n• **মজা** — জোক, গল্প, ধাঁধা, গেম (সংখ্যা অনুমান, পাথর-কাগজ-কাঁচি)\n• **রেফারেন্স** — তথ্যভিত্তিক উত্তরের শেষে সূত্র থাকে; উত্তর দেওয়ার আগে একাধিক সূত্র মিলিয়ে যাচাই করি\n• **Tazvirul-এর Facebook:** https://www.facebook.com/tazvirul96\n• **Live রিসার্চ** — তথ্যভিত্তিক প্রশ্নে লাইভ সূত্রসহ উত্তর: Gemini মোডে Google Search grounding, বিল্ট-ইন মোডেও Wikipedia থেকে লাইভ গবেষণা\n• **ছবি তৈরি** — 'Draw a sunset over a village' লিখলেই AI ছবি বানিয়ে দেখিয়ে দিই\n• **ভয়েস** — মাইক বোতামে চেপে মুখে বলো; আমার উত্তর শুনতে প্রতিটি উত্তরে **Listen** বোতাম\n• **মেমরি** — 'Remember that my exam is on Friday' লিখলে মনে রাখি — নতুন চ্যাটেও মনে থাকে; 'What do you remember?' লিখলে সব দেখাবে\n• **লাইভ কারেন্সি ও Unit রূপান্তর** — '100 USD to BDT' লিখলে আজকের আসল রেটে হিসাব; '5 km to miles', '37 °C to °F'-ও পারি\n• **টাইমার** — 'Set a timer for 5 minutes' লিখলেই টাইমার চলবে, সময় শেষ হলে চ্যাটে জানাব\n• **মেসেজ পাঠানো** — 'WhatsApp-এ মেসেজ পাঠাও' বা 'ইমেইল পাঠাও' বললেই মেসেজটা লিখে তৈরি one-tap লিংক দিই — WhatsApp/ইমেইল অ্যাপ খুলবে লেখা অবস্থায়, তুমি শুধু Send চাপবে\n\nযেকোনো একটা লিখে পাঠাও — যেমন 'Study plan বানাও', 'CV লিখে দাও', 'SEO tips' — অথবা Settings থেকে ফ্রি Gemini Key বসালে প্রতিটা বিষয়ে পূর্ণ AI শক্তি পাবে।",
+        "Everything I can do — just ask:\n\n• **Study & exams** — explain any topic simply, solve math/physics/chemistry/biology problems, notes, MCQs, mock tests, flashcards, study plans, revision plans, IELTS and admission prep\n• **Programming** — Python, JavaScript, C, C++, Java, PHP, SQL, React, Node: write, debug and explain code, projects, roadmaps\n• **Websites** — complete websites, portfolios, e-commerce, dashboards; hosting, deployment, SEO, bug fixes\n• **AI & automation** — chatbots, AI agents, prompt engineering, API integration, n8n/Make/Zapier automation\n• **Images & design** — thumbnail, logo, poster and banner concepts with ready-to-use image prompts\n• **Video & content** — YouTube/Shorts scripts, hooks, subtitles, titles, tags, SEO, content calendars\n• **Research** — any topic, comparisons, universities, jobs, scholarships, reports with sources\n• **Writing** — emails, CVs, cover letters, assignments, essays, applications, posts, stories, songs, poems\n• **Data & maths** — Excel/Sheets formulas, CSV analysis, charts, statistics, budgets, EMI, any calculation (try: 25 * 4 + 10)\n• **Documents** — attach a file (PDF, Word, Text, CSV): summary, answers, key information\n• **Photos** — send a photo: I'll describe it, read its text, solve what's in it (Gemini mode); name a famous person and I'll show their real photo with its source\n• **Business & freelancing** — Fiverr/Upwork profiles, gigs, proposals, business plans, marketing\n• **SEO & marketing** — keyword research, on-page/off-page SEO, YouTube SEO, growth strategy\n• **Civil engineering** — mechanics, surveying, concrete, estimation, BOQ, AutoCAD guidance\n• **Computer help** — Windows, PC problems, hardware choices, Linux, networking\n• **Cybersecurity** — security basics, spotting phishing, passwords, keeping your own site safe\n• **Planning** — daily/weekly routines, goals, habits, career and learning roadmaps\n• **Travel** — itineraries, budget trip plans, visa and study-abroad guidance\n• **Language** — English/Bangla teaching, speaking practice, translation (English ↔ Bengali ↔ Banglish)\n• **Finance** — budgets, savings plans, loan & EMI calculations, profit-loss\n• **Fun** — jokes, stories, riddles, games (number guessing, rock-paper-scissors)\n• **References** — factual answers end with a source, cross-checked across multiple sources first\n• **Tazvirul's Facebook:** https://www.facebook.com/tazvirul96\n• **Live research** — factual answers grounded in live sources: Google Search grounding in Gemini mode, and live Wikipedia research even in built-in mode\n• **Image generation** — say 'Draw a sunset over a village' and I'll create and show the picture\n• **Voice** — tap the mic button and speak; tap **Listen** on any of my replies to hear it read aloud\n• **Memory** — say 'Remember that my exam is on Friday' and I'll remember it across chats; ask 'What do you remember?' to see it all\n• **Live currency & unit conversion** — '100 USD to BDT' converts at today's real rate; '5 km to miles' and '37 °C to °F' work too\n• **Timer** — say 'Set a timer for 5 minutes' and I'll tell you here when time is up\n• **Send a message** — say 'Send a WhatsApp message' or 'Send an email' and I'll write it and give you a ready one-tap link — your WhatsApp/email app opens with it filled in, you just press Send\n\nType any of these — 'Make me a study plan', 'Write my CV', 'SEO tips' — or connect the free Gemini key in Settings for full AI power on every topic.",
+        "Ami ja ja korte pari — shudhu bollei hobe:\n\n• **Porashona o porikkha** — jekono bishoy sohoj byakkha, onko/physics/chemistry/biology somadhan, note, MCQ, mock test, flashcard, study plan, revision plan, IELTS o vorti prostuti\n• **Programming** — Python, JavaScript, C, C++, Java, PHP, SQL, React, Node: code lekha, debug, byakkha, project, roadmap\n• **Website** — sompurno website, portfolio, e-commerce, dashboard; hosting, deployment, SEO, bug fix\n• **AI o automation** — chatbot, AI agent, prompt engineering, API integration, n8n/Make/Zapier automation\n• **Chobi o design** — thumbnail, logo, poster, banner-er purnango concept ar toiri image prompt\n• **Video o content** — YouTube/Shorts script, hook, subtitle, title, tags, SEO, content calendar\n• **Research** — jekono bishoye gobeshona, tulona, university/chakri/scholarship tottho, source shoho report\n• **Lekha** — email, CV, cover letter, assignment, probondho, abedon, post, golpo, gaan, kobita\n• **Data o hishab** — Excel/Sheets formula, CSV bishleshon, chart, statistics, budget, EMI, jekono onko (likho: 25 * 4 + 10)\n• **Document** — file attach koro (PDF, Word, Text, CSV): sarangsho, proshner uttor, tottho khoja\n• **Chobi bojha** — chobi pathale dekhe bolbo, lekha pore debo, proshno somadhan korbo (Gemini mode-e); bikhyato manusher nam bolle tar asol chobi source shoho dekhiye di\n• **Business o freelancing** — Fiverr/Upwork profile, gig, proposal, business plan, marketing\n• **SEO o marketing** — keyword research, on-page/off-page SEO, YouTube SEO, growth strategy\n• **Civil engineering** — mechanics, surveying, concrete, estimation, BOQ, AutoCAD guide\n• **Computer sahajjo** — Windows, PC somossa, hardware pochondo, Linux, networking\n• **Cyber security** — nirapottar basic, phishing chena, password, nijer site nirapod rakha\n• **Planning** — daily/weekly routine, goal, habit, career o learning roadmap\n• **Vromon** — itinerary, budget trip plan, visa o bideshe porashonar guide\n• **Vasha** — English/Bangla shekha, speaking practice, onubad (English ↔ Bangla ↔ Banglish)\n• **Finance** — budget, savings plan, loan o EMI hishab, lav-khoti\n• **Moja** — joke, golpo, dhadha, game (sonkhya onuman, pathor-kagoj-kanchi)\n• **Reference** — tottho-vittik uttorer sheshe source thake; uttor deyar age ekadhik source miliye jachai kori\n• **Tazvirul-er Facebook:** https://www.facebook.com/tazvirul96\n• **Live research** — tottho-vittik uttore live source shoho uttor: Gemini mode-e Google Search grounding, built-in mode-eo Wikipedia theke live gobeshona\n• **Chobi toiri** — 'Draw a sunset over a village' likhlei AI chobi baniye dekhiye di\n• **Voice** — mic button-e chepe mukhe bolo; amar uttor shunte protiti uttore **Listen** button\n• **Memory** — 'Remember that my exam is on Friday' likhle mone rakhi — notun chat-eo mone thake; 'What do you remember?' likhle sob dekhabe\n• **Live currency o unit rupantor** — '100 USD to BDT' likhle ajker asol rate-e hishab; '5 km to miles', '37 °C to °F'-o pari\n• **Timer** — 'Set a timer for 5 minutes' likhlei timer cholbe, somoy shesh hole chat-e janabo\n• **Message pathano** — 'WhatsApp-e message pathao' ba 'Email pathao' bollei message-ta likhe toiri one-tap link di — WhatsApp/email app khulbe lekha obosthay, tumi shudhu Send chapbe\n\nJekono ekta likhe pathao — jemon 'Study plan banao', 'CV likhe dao', 'SEO tips' — othoba Settings theke free Gemini Key boshale protita bishoye purno AI shokti pabe.");
     }
 
     function mathAskText(lang) {
@@ -2017,6 +2215,144 @@
       }
       if (langPref === "auto" && wantsEnglish(t) && t.length <= 80) {
         return { text: "Sure! From now on I'll speak in **English**. \nIf you want Bangla again, just say: 'Speak in Bangla'.\n\nSo — what would you like to know?" };
+      }
+
+      /* --- personal memory: remember / recall / forget — works in every mode --- */
+      var memRem = t.match(/(?:remember(?:\s+that)?|মনে রাখো|মনে রেখো|note\s+down(?:\s+that)?|note\s+that)[:\s]+(.+)/i);
+      if (memRem && memRem[1] && memRem[1].trim().length >= 2 && !/^(me|us)\W*$/i.test(memRem[1].trim()) && !/^(who|what|when|where|why|how)\b/i.test(memRem[1].trim()) && !/(what|কী|কি)/i.test(memRem[1].slice(0, 12))) {
+        var fact = memRem[1].trim().replace(/[।.]+$/, "");
+        rememberFact(fact);
+        return { text: L(lang,
+          "মনে রাখলাম! \n\n**\"" + fact + "\"**\n\nএটা এখন এই ব্রাউজারে সেভ হয়ে গেল — নতুন চ্যাটেও মনে থাকবে। যা মনে রেখেছি দেখতে লিখো 'What do you remember?', আর সব মুছতে লিখো 'Forget everything'।",
+          "Remembered! \n\n**\"" + fact + "\"**\n\nIt's saved in this browser now — I'll remember it in new chats too. Ask 'What do you remember?' to see everything, or say 'Forget everything' to clear it all.",
+          "Mone rakhlam! \n\n**\"" + fact + "\"**\n\nEta ekhon ei browser-e save hoye gelo — notun chat-eo mone thakbe. Ja mone rekhechi dekhte likho 'What do you remember?', ar sob muchte likho 'Forget everything'.") };
+      }
+      if (/(what do you remember|what do you know about me|do you remember me|আমার সম্পর্কে (কী|কি) মনে আছে|আমার সম্পর্কে কি জানো|amar somporke ki mone|amar (bepare|bepare) ki jano|ki mone ache|কী মনে রেখেছ|মেমরি (দেখাও|বলো)|show (me )?(your )?memory|list memory)/i.test(low)) {
+        if (!memoryFacts.length) {
+          return { text: L(lang,
+            "এখনো কিছু মনে রাখিনি। কিছু মনে রাখতে চাইলে এভাবে লিখো: **'Remember that my exam is on Friday'** — তাহলে সেটা সেভ করে রাখব, নতুন চ্যাটেও মনে থাকবে।",
+            "I haven't saved anything yet. To make me remember something, write it like: **'Remember that my exam is on Friday'** — I'll save it and remember it in new chats too.",
+            "Ekhono kichu mone rakhini. Kichu mone rakhte chaile evabe likho: **'Remember that my exam is on Friday'** — tahole seta save kore rakhbo, notun chat-eo mone thakbe.") };
+        }
+        return { text: L(lang,
+          "তোমার সম্পর্কে যা যা মনে রেখেছি:\n\n" + memoryFacts.map(function (f) { return "• " + f; }).join("\n") + "\n\nসব মুছতে চাইলে লিখো 'Forget everything'।",
+          "Here's everything I remember about you:\n\n" + memoryFacts.map(function (f) { return "• " + f; }).join("\n") + "\n\nTo erase it all, say 'Forget everything'.",
+          "Tomar somporke ja ja mone rekhechi:\n\n" + memoryFacts.map(function (f) { return "• " + f; }).join("\n") + "\n\nSob muchte chaile likho 'Forget everything'.") };
+      }
+      if (/(forget everything|forget all|সব ভুলে যাও|সবকিছু ভুলে যাও|মেমরি মুছে (দাও|ফেল)|clear (your )?memory|delete (your )?memory|erase memory)/i.test(low)) {
+        forgetMemory();
+        return { text: L(lang,
+          "ঠিক আছে — যা যা মনে রেখেছিলাম **সব মুছে দিলাম**। এখন থেকে নতুন করে শুরু। আবার কিছু মনে রাখতে চাইলে 'Remember that…' লিখলেই হবে।",
+          "Done — I've **erased everything I had remembered**. Fresh start. Whenever you want me to remember something again, just say 'Remember that…'.",
+          "Thik ache — ja ja mone rekhechilam **sob muche dilam**. Ekhon theke notun kore shuru. Abar kichu mone rakhte chaile 'Remember that…' likhlei hobe.") };
+      }
+
+      /* --- send a message: WhatsApp / email — TazAI drafts the message and
+         hands over a ready, prefilled one-tap link (wa.me / mailto); the
+         user's own app opens with everything filled in, they just press
+         Send there. Works in every mode (built-in brain handles it). --- */
+      function extractPhone(tt) {
+        var squished = (tt || "").replace(/[\s-]/g, "");
+        var pm = squished.match(/(\+?8801[3-9]\d{8}|01[3-9]\d{8}|\+\d{10,15})/);
+        if (!pm) return null;
+        var d = pm[1].replace(/\D/g, "");
+        if (d.length === 11 && d.charAt(0) === "0") d = "880" + d.slice(1); // BD local number → international
+        return d;
+      }
+      function extractEmailAddr(tt) {
+        var em = (tt || "").match(/[\w.+-]+@[\w-]+\.[\w.]{2,}/);
+        return em ? em[0] : null;
+      }
+      function extractMsgContent(tt) {
+        var mm = tt.match(/[""«]([^""»]{2,})[""»]/) || tt.match(/'([^']{3,})'/);
+        if (mm) return mm[1].trim();
+        mm = tt.match(/(?:saying|bole|বলে|likhe dao|লিখে দাও|message|মেসেজ)[:\s]+(.{2,})$/i);
+        if (mm) return mm[1].trim();
+        mm = tt.match(/[:ঃ]\s*(.{2,})$/);
+        if (mm && !/^\d/.test(mm[1])) return mm[1].trim();
+        return null;
+      }
+      function msgFinal(channel, target, content, lg) {
+        if (channel === "wa") {
+          return {
+            text: L(lg,
+              "**তোমার WhatsApp মেসেজ তৈরি!** \n\nপাঠানো হচ্ছে: **" + target + "**\nমেসেজ: \"" + content + "\"\n\nনিচের বোতামে ট্যাপ করলেই WhatsApp খুলবে — মেসেজটা লেখা অবস্থায় পাবে, তুমি শুধু **Send** চাপবে। (আমি নিজে সরাসরি পাঠাতে পারি না — পাঠানোর শেষ ট্যাপটা তোমার হাতেই থাকে, এটাই নিরাপদ নিয়ম।)",
+              "**Your WhatsApp message is ready!** \n\nTo: **" + target + "**\nMessage: \"" + content + "\"\n\nTap the button below — WhatsApp opens with the message already written; you just press **Send**. (I can't send it directly myself — the final send tap stays in your hands, which is the safe way.)",
+              "**Tomar WhatsApp message toiri!** \n\nPathano hocche: **" + target + "**\nMessage: \"" + content + "\"\n\nNicher button-e tap korlei WhatsApp khulbe — message-ta lekha obosthay pabe, tumi shudhu **Send** chapbe. (Ami nije shorashori pathate pari na — pathanor shesh tap-ta tomar hatei thake, etai nirapod niyom.)"),
+            link: { href: "https://wa.me/" + target + "?text=" + encodeURIComponent(content), label: L(lg, "WhatsApp খুলে পাঠাও", "Open WhatsApp & send", "WhatsApp khule pathao") }
+          };
+        }
+        return {
+          text: L(lg,
+            "**তোমার ইমেইল তৈরি!** \n\n" + (target ? "পাঠানো হচ্ছে: **" + target + "**\n" : "ঠিকানা দেওয়া হয়নি — ইমেইল অ্যাপে নিজে বসিয়ে নিও।\n") + "লেখা: \"" + content + "\"\n\nনিচের বোতামে ট্যাপ করলেই তোমার ইমেইল অ্যাপ খুলবে — লেখাটা বসানো অবস্থায় পাবে, তুমি শুধু **Send** চাপবে। (আমি নিজে সরাসরি পাঠাতে পারি না — পাঠানোর শেষ ট্যাপটা তোমার হাতেই থাকে, এটাই নিরাপদ নিয়ম।)",
+            "**Your email is ready!** \n\n" + (target ? "To: **" + target + "**\n" : "No address given — add it in your email app.\n") + "Text: \"" + content + "\"\n\nTap the button below — your email app opens with the text already in place; you just press **Send**. (I can't send it directly myself — the final send tap stays in your hands, which is the safe way.)",
+            "**Tomar email toiri!** \n\n" + (target ? "Pathano hocche: **" + target + "**\n" : "Thikana deya hoyni — email app-e nije bosiye nio.\n") + "Lekha: \"" + content + "\"\n\nNicher button-e tap korlei tomar email app khulbe — lekha-ta bosano obosthay pabe, tumi shudhu **Send** chapbe. (Ami nije shorashori pathate pari na — pathanor shesh tap-ta tomar hatei thake, etai nirapod niyom.)"),
+          link: { href: "mailto:" + (target || "") + "?body=" + encodeURIComponent(content), label: L(lg, "ইমেইল খুলে পাঠাও", "Open email & send", "Email khule pathao") }
+        };
+      }
+      if (msgFlow && t.length <= 40 && /(what can you do|capabilit|help|সাহায্য|sahajjo|kemon|কেমন|hello|helo|song|গান|joke|জোক|study plan)/i.test(low)) { msgFlow = null; }
+      if (msgFlow) {
+        if (/(থাম|বন্ধ কর|stop|cancel|বাদ দাও)/i.test(low) && t.length <= 30) {
+          msgFlow = null;
+          return { text: L(lang, "ঠিক আছে, মেসেজটা বাদ দিলাম। অন্য কিছু লাগলে বলো।", "Okay, message cancelled. Tell me if you need anything else.", "Thik ache, message-ta bad dilam. Onno kichu lagle bolo.") };
+        }
+        var mf = msgFlow;
+        if (mf.channel === "ask") {
+          if (/(whatsapp|হোয়াটসঅ্যাপ)/i.test(low)) mf.channel = "wa";
+          else if (/(email|ইমেইল|mail)/i.test(low)) mf.channel = "email";
+          else return { text: L(lang, "কোনটা দিয়ে পাঠাবে — **WhatsApp** নাকি **Email**? একটা বেছে নাও।", "Which one — **WhatsApp** or **Email**? Pick one.", "Konta diye pathabe — **WhatsApp** naki **Email**? Ekta beche nao."), buttons: ["WhatsApp", "Email"] };
+        }
+        if (mf.channel === "wa") {
+          var wNum = extractPhone(t) || mf.number || null;
+          var wCont = extractMsgContent(t) || mf.content || null;
+          if (!wCont && !extractPhone(t) && t.length >= 2 && !/(whatsapp|হোয়াটসঅ্যাপ)/i.test(low)) wCont = t;
+          if (!wNum) {
+            msgFlow = { channel: "wa", content: wCont };
+            return { text: L(lang, "কার **WhatsApp নম্বর**-এ পাঠাবে? নম্বরটা লিখে দাও — যেমন 01712345678 (দেশের কোডসহও দিতে পারো: +8801712345678)।" + (wCont ? "\n\nতোমার মেসেজটা পেয়ে গেছি: \"" + wCont + "\"" : " সাথে কী লিখতে চাও সেটাও দিতে পারো।"), "Whose **WhatsApp number** should I send it to? Type the number — e.g. 01712345678 (or with country code: +8801712345678)." + (wCont ? "\n\nGot your message: \"" + wCont + "\"" : " You can include what to write, too."), "Kar **WhatsApp number**-e pathabe? Number-ta likhe dao — jemon 01712345678 (desher code shoho-o dite paro: +8801712345678)." + (wCont ? "\n\nTomar message-ta peye gechi: \"" + wCont + "\"" : " Sathe ki likhte chao setao dite paro.")) };
+          }
+          if (!wCont) {
+            msgFlow = { channel: "wa", number: wNum };
+            return { text: L(lang, "নম্বর পেয়ে গেছি: **" + wNum + "**। এবার বলো — **কী লিখে পাঠাব**?", "Got the number: **" + wNum + "**. Now tell me — **what should the message say**?", "Number peye gechi: **" + wNum + "**. Ebar bolo — **ki likhe pathabo**?") };
+          }
+          msgFlow = null;
+          return msgFinal("wa", wNum, wCont, lang);
+        }
+        if (mf.channel === "email") {
+          var eAddr = extractEmailAddr(t) || mf.addr || null;
+          var eCont = extractMsgContent(t) || mf.content || null;
+          if (!eCont && !extractEmailAddr(t) && t.length >= 2 && !/(email|ইমেইল|mail)/i.test(low)) eCont = t;
+          if (!eCont) {
+            msgFlow = { channel: "email", addr: eAddr };
+            return { text: L(lang, (eAddr ? "ইমেইল ঠিকানা পেয়ে গেছি: **" + eAddr + "**। " : "") + "এবার বলো — **ইমেইলে কী লিখতে চাও**? (চাইলে কার ঠিকানায় পাঠাবে সেটাও একসাথে দিতে পারো।)", (eAddr ? "Got the email address: **" + eAddr + "**. " : "") + "Now tell me — **what should the email say**? (You can add the recipient's address too, if you haven't.)", (eAddr ? "Email thikana peye gechi: **" + eAddr + "**. " : "") + "Ebar bolo — **email-e ki likhte chao**? (Chaile kar thikanay pathabe setao eksathe dite paro.)") };
+          }
+          msgFlow = null;
+          return msgFinal("email", eAddr || "", eCont, lang);
+        }
+        msgFlow = null;
+      }
+      var waHit = /(whatsapp|হোয়াটসঅ্যাপ|whats app)/i.test(low);
+      var emHit = /(email|e-mail|ইমেইল|gmail)/i.test(low);
+      var sendVerb = /(send|পাঠা|patha|পাঠাও|pathao|মেসেজ|message|msg|লিখে দাও|likhe dao|লিখ|likh|write)/i.test(low);
+      var genericMsgHit = /(send|পাঠা|patha|পাঠাও|pathao)\s+(a\s+)?(message|মেসেজ|msg)/i.test(low) || /(মেসেজ|message|msg)\s*(পাঠা|patha|send)/i.test(low);
+      if ((waHit || emHit || genericMsgHit) && (sendVerb || genericMsgHit)) {
+        var mChannel = waHit ? "wa" : emHit ? "email" : "ask";
+        if (mChannel === "ask") {
+          msgFlow = { channel: "ask" };
+          return { text: L(lang, "অবশ্যই পাঠিয়ে দিচ্ছি! কোনটা দিয়ে পাঠাবে — **WhatsApp** নাকি **Email**?", "Of course! Which should I use — **WhatsApp** or **Email**?", "Oboshshoi pathiye dicchi! Konta diye pathabe — **WhatsApp** naki **Email**?"), buttons: ["WhatsApp", "Email"] };
+        }
+        if (mChannel === "wa") {
+          var wNum0 = extractPhone(t);
+          var wCont0 = extractMsgContent(t);
+          if (wNum0 && wCont0) return msgFinal("wa", wNum0, wCont0, lang);
+          msgFlow = { channel: "wa", number: wNum0, content: wCont0 };
+          if (!wNum0) return { text: L(lang, "অবশ্যই! কার **WhatsApp নম্বর**-এ পাঠাবে আর **কী লিখতে চাও** — দুটোই একসাথে দাও। যেমন: '01712345678, Happy birthday! কাল দেখা হচ্ছে।'", "Sure! Give me both together — the **WhatsApp number** and **what to write**. E.g.: '01712345678, Happy birthday! See you tomorrow.'", "Oboshshoi! Kar **WhatsApp number**-e pathabe ar **ki likhte chao** — dutoi eksathe dao. Jemon: '01712345678, Happy birthday! Kal dekha hocche.'") };
+          return { text: L(lang, "নম্বর পেয়ে গেছি: **" + wNum0 + "**। এবার বলো — **কী লিখে পাঠাব**?", "Got the number: **" + wNum0 + "**. Now tell me — **what should the message say**?", "Number peye gechi: **" + wNum0 + "**. Ebar bolo — **ki likhe pathabo**?") };
+        }
+        var eAddr0 = extractEmailAddr(t);
+        var eCont0 = extractMsgContent(t);
+        if (eCont0) return msgFinal("email", eAddr0 || "", eCont0, lang);
+        msgFlow = { channel: "email", addr: eAddr0 };
+        return { text: L(lang, "অবশ্যই! **ইমেইলে কী লিখতে চাও** বলো" + (eAddr0 ? " — ঠিকানা পেয়ে গেছি: **" + eAddr0 + "**।" : " — আর কার **ইমেইল ঠিকানা**-য় পাঠাবে সেটাও দিতে পারো (না দিলেও চলবে, অ্যাপে বসিয়ে নিলেই হবে)।"), "Sure! Tell me **what the email should say**" + (eAddr0 ? " — got the address: **" + eAddr0 + "**." : " — and the **recipient's email address** if you have it (optional — you can add it in the app)."), "Oboshshoi! **Email-e ki likhte chao** bolo" + (eAddr0 ? " — thikana peye gechi: **" + eAddr0 + "**." : " — ar kar **email thikana**-y pathabe setao dite paro (na dileo cholbe, app-e bosiye nilei hobe).")) };
       }
 
       /* --- document flow, stage 2: the visitor is answering the detail
@@ -2247,10 +2583,24 @@
         }
       }
 
+      /* --- unit conversion: "5 km to miles", "100 kg in pounds", "37 °C to °F" --- */
+      var unitRe = /(-?\d+(?:\.\d+)?)\s*(kilometers?|km|miles?|mi|centimeters?|cm|inches|inch|feet|foot|ft|meters?|metres?|kilograms?|kg|pounds?|lbs?|grams?|g|liters?|litres?|gallons?|gal|ml|celsius|centigrade|fahrenheit|°c|°f)\s*(?:to|in|=|→|থেকে)?\s*(kilometers?|km|miles?|mi|centimeters?|cm|inches|inch|feet|foot|ft|meters?|metres?|kilograms?|kg|pounds?|lbs?|grams?|g|liters?|litres?|gallons?|gal|ml|celsius|centigrade|fahrenheit|°c|°f)/i;
+      var unitM = t.match(unitRe);
+      if (unitM) {
+        var conv = convertUnits(parseFloat(unitM[1]), unitM[2], unitM[3]);
+        if (conv) {
+          return { text: L(lang,
+            "রূপান্তর করে দিলাম:\n\n**" + unitM[1] + " " + conv.fromLabel + " = " + conv.value + " " + conv.toLabel + "**\n\nআরেকটা রূপান্তর চাইলে এভাবে লিখো: '10 inch to cm' বা '72 °F to °C'।",
+            "Converted:\n\n**" + unitM[1] + " " + conv.fromLabel + " = " + conv.value + " " + conv.toLabel + "**\n\nFor another one, write it like: '10 inch to cm' or '72 °F to °C'.",
+            "Rupantor kore dilam:\n\n**" + unitM[1] + " " + conv.fromLabel + " = " + conv.value + " " + conv.toLabel + "**\n\nArekta rupantor chaile evabe likho: '10 inch to cm' ba '72 °F to °C'.") };
+        }
+      }
+
       /* --- name capture --- */
       var nm = t.match(/(?:আমার নাম|নাম হলো|নাম হচ্ছে)\s*([^\s।.!?]+)/) || low.match(/(?:my name is|amar nam(?: holo| hocche)?|amar name)\s+([a-z][a-z'-]*)/i) || low.match(/ami\s+([a-z]+)/i);
       if (nm && nm[1]) {
         userName = nm[1].charAt(0).toUpperCase() + nm[1].slice(1);
+        rememberFact("User's name is " + userName);
         return { text: L(lang, "বাহ, **" + userName + "**! নামটা মনে রাখলাম। এখন থেকে তোমাকে এই নামেই ডাকব। বলো " + userName + ", আজ কী নিয়ে গল্প হবে?", "Nice to meet you, **" + userName + "**! I'll call you that from now on. So, what shall we talk about?", "Bah, **" + userName + "**! Nam-ta mone rakhlam. Ekhon theke tomake ei nam-ei dakbo. Bolo " + userName + ", aj ki niye golpo hobe?") };
       }
       if (/(আমার নাম কি|আমার নাম কী|আমার নামটা|what is my name|আমাকে কি নামে|amar nam ki|amar namta ki|amake ki name dakbe)/i.test(low)) {
@@ -2364,6 +2714,33 @@
       if (/(অনুপ্রেরণা|মোটিভেশন|motivat|quote|উক্তি|inspire)/i.test(low)) {
         var qi2 = pickIdx(QUOTES, lastQuote); lastQuote = qi2;
         return { text: QUOTES[qi2] };
+      }
+
+      /* --- timer: a real in-page timer ("set a timer for 5 minutes") ---
+         (checked BEFORE the clock branch below, whose "time" pattern would
+         otherwise swallow every timer request) */
+      var timerM = low.match(/(?:set\s+(?:a\s+)?timer\s+(?:for\s+)?|timer\s+)(\d+(?:\.\d+)?)\s*(hours?|hrs?|minutes?|mins?|seconds?|secs?)/i)
+        || low.match(/(\d+(?:\.\d+)?)\s*(hours?|hrs?|minutes?|mins?|seconds?|secs?)\s*(?:er\s+|এর\s+)?(?:timer|টাইমার)/i)
+        || t.match(/(\d+(?:\.\d+)?)\s*(ঘণ্টা|মিনিট|সেকেন্ড)(ের)?\s*টাইমার/);
+      if (timerM && /(timer|টাইমার|set|সেট)/i.test(low)) {
+        var tNum = parseFloat(timerM[1]);
+        var tUnit = timerM[2] || "";
+        var tMs = /ঘণ্টা|hour|hr/.test(tUnit) ? tNum * 3600000 : /সেকেন্ড|second|sec/.test(tUnit) ? tNum * 1000 : tNum * 60000;
+        if (tMs >= 1000 && tMs <= 24 * 3600000) {
+          var tLabel = timerM[1] + " " + tUnit;
+          (function (ms, label, lg) {
+            setTimeout(function () {
+              addMsg(L(lg,
+                "**টাইমার শেষ!** ⏰\n\nতোমার " + label + "-এর টাইমার শেষ হলো।",
+                "**Time's up!** ⏰\n\nYour " + label + " timer is done.",
+                "**Timer shesh!** ⏰\n\nTomar " + label + "-er timer shesh holo."), "bot");
+            }, ms);
+          })(tMs, tLabel, lang);
+          return { text: L(lang,
+            "**টাইমার সেট হয়ে গেছে: " + tLabel + "** ⏱\n\nসময় শেষ হলেই এই চ্যাটে জানিয়ে দেব। (পেজটা খোলা রেখো — পেজ বন্ধ করলে টাইমারও থেমে যাবে।)",
+            "**Timer set: " + tLabel + "** ⏱\n\nI'll message you right here in the chat when the time is up. (Keep this page open — closing the page stops the timer.)",
+            "**Timer set hoye geche: " + tLabel + "** ⏱\n\nSomoy shesh holei ei chat-e janiye debo. (Page-ta khola rekho — page bondho korle timer-o theme jabe.)") };
+        }
       }
 
       /* --- time & date --- */
@@ -2511,7 +2888,7 @@
       /* --- hard / factual question in built-in mode: be honest, give a reference path, never guess --- */
       var looksHard = /(কেন|কীভাবে|কিভাবে|ব্যাখ্যা|বলতে পারো.*কী|কাকে বলে|কাকে বলা হয়|সংজ্ঞা|কারণ কী|কি কারণে|কবে (হয়েছিল|জন্ম|মারা|প্রতিষ্ঠিত)|কে (আবিষ্কার|তৈরি|লিখেছিলেন|প্রতিষ্ঠা)|কোথায় অবস্থিত|কত (সালে|সালে.*)|ইতিহাস|বৈজ্ঞানিক|সূত্র|নিয়ম|তত্ত্ব|রোগ|চিকিৎসা|ওষুধ|আইন|why|how does|how do|explain|what is|what are|who (invented|discovered|wrote|founded)|when did|where is|definition|science|history|formula|disease|medicine|law|keno|kivabe|kemne|byakkha|kake bole|kake bola hoy|songya|karon ki|ki karone|ke abishkar|kothay obosthito|itihas|bigganik|shutro|niyom|totto|rog|chikitsa|oshudh|ain)/i.test(low);
       if (looksHard) {
-        return { text: L(lang,
+        return { hard: true, text: L(lang,
           "সৎভাবে বলি — **এই প্রশ্নটার সঠিক উত্তর আমি নিশ্চিতভাবে জানি না**, তাই অনুমান করে ভুল উত্তর দেব না।\n\n **নির্ভরযোগ্য সূত্র:** পাঠ্যবিষয় হলে **NCTB পাঠ্যবই**; সাধারণ জ্ঞান/বিজ্ঞানে **Encyclopaedia Britannica** বা **Wikipedia**; স্বাস্থ্য/আইনে সংশ্লিষ্ট **অফিসিয়াল ওয়েবসাইট বা বিশেষজ্ঞ**।\n\nSettings থেকে ফ্রি Gemini Key বসালে আমি নিজেই এ ধরনের প্রশ্নের গভীর উত্তর দিতে পারব।",
           "Honestly — **I don't know the correct answer to this for sure**, so I won't guess.\n\n **Where to verify:** study topics — your **NCTB textbook**; general knowledge/science — **Encyclopaedia Britannica** or **Wikipedia**; health/legal — the relevant **official website or a qualified expert**.\n\nConnect a free Gemini key in Settings and I can answer questions like this in depth myself.",
           "Shotti bolchi — **ei proshno-tar sothik uttor ami nishchit-vabe jani na**, tai onuman kore vul uttor debo na.\n\n **Nirvorjoggo source:** porar bishoy hole **NCTB patho-boi**; shadharon gyan/biggane **Encyclopaedia Britannica** ba **Wikipedia**; shastho/ain-e **official website ba bisheshoggo**.\n\nSettings theke free Gemini Key boshale ami nijei e dhoroner proshner govir uttor dite parbo.") };
@@ -2669,6 +3046,171 @@
       return chain;
     }
 
+    /* ============ Live Wikipedia research (built-in mode) ============
+       For hard factual questions without a Gemini key, TazAI now researches
+       LIVE: it searches Wikipedia (English first, then Bengali), reads the
+       article summary and answers from it with the source link — real data,
+       never a guess. When nothing reliable is found, the honest "I don't
+       know" fallback is shown instead. */
+    function extractTopic(text) {
+      var q = " " + (text || "").replace(/[?.!।,;:"""]/g, " ") + " ";
+      q = q.replace(/\s(what is|what are|who is|who was|who invented|tell me about|explain|define|describe|please|the)\s/gi, " ");
+      q = q.replace(/\s(কী|কি|কাকে বলে|কাকে বলা হয়|সম্পর্কে বলো|সম্পর্কে বল|মানে কী|ব্যাখ্যা করো|বলো তো|কেন|কীভাবে|কিভাবে)\s/g, " ");
+      q = q.replace(/\s+/g, " ").trim();
+      return q.slice(0, 90);
+    }
+    function researchWiki(topic) {
+      if (!topic) return Promise.resolve(null);
+      function summaryOrNull(lang, title) {
+        return wikiSummary(lang, title).then(function (s) {
+          return (s && s.extract && s.type !== "disambiguation") ? s : null;
+        }).catch(function () { return null; });
+      }
+      function searchThenSummary(lang, q) {
+        return wikiSearchTitles(lang, q).then(function (titles) {
+          var chain = Promise.resolve(null);
+          titles.slice(0, 3).forEach(function (title) {
+            chain = chain.then(function (found) {
+              if (found) return found;
+              return summaryOrNull(lang, title);
+            });
+          });
+          return chain;
+        }).catch(function () { return null; });
+      }
+      return summaryOrNull("en", topic)
+        .then(function (s) { return s || searchThenSummary("en", topic); })
+        .then(function (s) { return s || summaryOrNull("bn", topic); })
+        .then(function (s) { return s || searchThenSummary("bn", topic); })
+        .catch(function () { return null; });
+    }
+    function formatResearch(sum, lang) {
+      var pageUrl = (sum.content_urls && sum.content_urls.desktop && sum.content_urls.desktop.page) || ("https://en.wikipedia.org/wiki/" + encodeURIComponent(String(sum.title || "").replace(/\s+/g, "_")));
+      var extract = String(sum.extract || "").replace(/\s+/g, " ").trim();
+      if (extract.length > 1100) extract = extract.slice(0, 1100).replace(/\s+\S*$/, "") + "…";
+      return L(lang,
+        "লাইভ গবেষণা করে উত্তরটা পেলাম \n\n**" + (sum.title || "") + "**\n\n" + extract + "\n\nরেফারেন্স / Source: Wikipedia — " + pageUrl + "\n\nআরও জানতে চাইলে এই বিষয়ের অন্য প্রশ্ন করো, অথবা পুরো AI গবেষণার জন্য Settings-এ ফ্রি Gemini Key বসাও — তখন Google Search-এর লাইভ সূত্রসহ আরও গভীর উত্তর পাবে।",
+        "I researched this live \n\n**" + (sum.title || "") + "**\n\n" + extract + "\n\nReference / Source: Wikipedia — " + pageUrl + "\n\nAsk a follow-up about this topic any time — or connect the free Gemini key in Settings for deeper answers grounded in live Google Search sources.",
+        "Live gobeshona kore uttor-ta pelam \n\n**" + (sum.title || "") + "**\n\n" + extract + "\n\nReference / Source: Wikipedia — " + pageUrl + "\n\nAro jante chaile ei bishoyer onno proshno koro, othoba puro AI gobeshonar jonno Settings-e free Gemini Key boshao — tokhon Google Search-er live source shoho aro govir uttor pabe.");
+    }
+    function researchThenAnswer(text, fallbackRes) {
+      var lang = resolveLang(text);
+      showTyping(workSteps("text"));
+      researchWiki(extractTopic(text)).then(function (sum) {
+        hideTyping();
+        sendBtn.disabled = false;
+        if (sum) addMsg(formatResearch(sum, lang), "bot");
+        else addMsg(fallbackRes.text, "bot", fallbackRes.buttons);
+        try { input.focus(); } catch (e) {}
+        drainQueue();
+      }).catch(function () {
+        hideTyping();
+        sendBtn.disabled = false;
+        addMsg(fallbackRes.text, "bot", fallbackRes.buttons);
+        try { input.focus(); } catch (e) {}
+        drainQueue();
+      });
+    }
+
+    /* ============ Image generation (draw / create an image) ============
+       "Draw a sunset over a village" → a real AI-generated image, produced
+       live by a free image-generation service and shown in the chat. */
+    function extractImagePrompt(text) {
+      var t = (text || "").trim();
+      if (!t || t.length > 300) return null;
+      if (/(thumbnail|logo|poster|banner|থাম্বনেইল|লোগো|পোস্টার|ব্যানার)/i.test(t)) return null; // design-concept requests stay with the design helper
+      var bn = t.match(/(ছবি|chobi)\s*(আঁকো|আঁক|বানাও|বানিয়ে দাও|তৈরি করো|তৈরি করে দাও)?\s*[:：]?\s*(.*)$/i);
+      if (bn && /(আঁক|বানা|তৈরি|draw|make|create|generate)/i.test(t)) return (bn[3] || "").trim();
+      var m = t.match(/(?:draw|paint|generate|create|make|imagine)\b[^.!?]*?\b(?:image|picture|photo|drawing|painting|illustration|artwork)\b\s*(?:of|showing|with)?\s*(.*)$/i);
+      if (m) return (m[1] || "").trim();
+      return null;
+    }
+    function startImageGen(subject, lang) {
+      sendBtn.disabled = true;
+      showTyping(L(lang,
+        ["ছবিটা আঁকছি…", "রঙ আর বিবরণ মেলাচ্ছি…", "প্রায় তৈরি…"],
+        ["Drawing your image…", "Adding colour and detail…", "Almost ready…"],
+        ["Chobi-ta akchi…", "Rong ar biboron melachchi…", "Pray toiri…"]));
+      var seed = Math.floor(Math.random() * 999999);
+      var url = "https://image.pollinations.ai/prompt/" + encodeURIComponent(subject) + "?width=1024&height=1024&nologo=true&seed=" + seed;
+      var probe = new Image();
+      var done = false;
+      var to = setTimeout(function () {
+        if (done) return; done = true;
+        hideTyping(); sendBtn.disabled = false;
+        addMsg(L(lang,
+          "দুঃখিত — ছবিটা তৈরি হতে বেশি সময় লাগছে। আরেকবার চেষ্টা করো, অথবা বিষয়টা আরেকটু সহজ করে লিখো।",
+          "Sorry — the image is taking too long to generate. Please try again, or describe it a little more simply.",
+          "Dukkhito — chobi-ta toiri hote beshi somoy lagche. Arekbar cheshta koro, othoba bishoy-ta arektu sohoj kore likho."), "bot");
+        try { input.focus(); } catch (e) {}
+        drainQueue();
+      }, 60000);
+      probe.onload = function () {
+        if (done) return; done = true; clearTimeout(to);
+        hideTyping(); sendBtn.disabled = false;
+        addMsg(L(lang,
+          "তোমার ছবি তৈরি! \n\n**বিষয়:** " + subject + "\n\nআরেকটা ছবি চাইলে শুধু বলো কী আঁকব — যেমন 'Draw a village in the rain'।",
+          "Your image is ready! \n\n**Prompt:** " + subject + "\n\nWant another? Just tell me what to draw — e.g. 'Draw a village in the rain'.",
+          "Tomar chobi toiri! \n\n**Bishoy:** " + subject + "\n\nArekta chobi chaile shudhu bolo ki akbo — jemon 'Draw a village in the rain'."), "bot", null, url);
+        try { input.focus(); } catch (e) {}
+        drainQueue();
+      };
+      probe.onerror = function () {
+        if (done) return; done = true; clearTimeout(to);
+        hideTyping(); sendBtn.disabled = false;
+        addMsg(L(lang,
+          "ছবিটা বানাতে সমস্যা হলো — ইন্টারনেট সংযোগটা দেখে আবার চেষ্টা করো।",
+          "Couldn't generate the image — check your internet connection and try again.",
+          "Chobi-ta banate somossa holo — internet connection-ta dekhe abar cheshta koro."), "bot");
+        try { input.focus(); } catch (e) {}
+        drainQueue();
+      };
+      probe.src = url;
+    }
+
+    /* ============ Live currency conversion ============
+       "100 USD to BDT" → converted with TODAY's real rate from a public
+       exchange-rate API, with the source and update time shown. */
+    var CURR_MAP = { usd: "USD", dollar: "USD", dollars: "USD", bdt: "BDT", taka: "BDT", inr: "INR", rupee: "INR", rupees: "INR", eur: "EUR", euro: "EUR", euros: "EUR", gbp: "GBP", pound: "GBP", pounds: "GBP", aed: "AED", dirham: "AED", sar: "SAR", riyal: "SAR", kwd: "KWD", dinar: "KWD", myr: "MYR", ringgit: "MYR", sgd: "SGD", aud: "AUD", cad: "CAD", jpy: "JPY", yen: "JPY", cny: "CNY", yuan: "CNY", krw: "KRW", pkr: "PKR", lkr: "LKR", npr: "NPR", qar: "QAR", omr: "OMR", bhd: "BHD", "ডলার": "USD", "টাকা": "BDT", "রুপি": "INR", "পাউন্ড": "GBP" };
+    var CURR_TOKEN = "(dollar|dollars|taka|rupee|rupees|euro|euros|pound|pounds|dirham|riyal|dinar|ringgit|yen|yuan|ডলার|টাকা|রুপি|পাউন্ড|[a-z]{3})(?![a-z])";
+    function parseCurrencyQuery(text) {
+      var m = (text || "").match(new RegExp("(\\d+(?:\\.\\d+)?)\\s*" + CURR_TOKEN + "\\s*(?:to|in|=|→|থেকে)?\\s*" + CURR_TOKEN, "i"));
+      if (!m) return null;
+      var from = CURR_MAP[m[2].toLowerCase()] || (/^[a-z]{3}$/i.test(m[2]) ? m[2].toUpperCase() : null);
+      var to = CURR_MAP[m[3].toLowerCase()] || (/^[a-z]{3}$/i.test(m[3]) ? m[3].toUpperCase() : null);
+      if (!from || !to || from === to) return null;
+      return { amount: parseFloat(m[1]), from: from, to: to };
+    }
+    function startCurrency(q, lang) {
+      sendBtn.disabled = true;
+      showTyping(L(lang, ["আজকের লাইভ রেট আনছি…"], ["Fetching today's live exchange rate…"], ["Ajker live rate anchi…"]));
+      fetch("https://open.er-api.com/v6/latest/" + q.from).then(function (r) { return r.json(); }).then(function (d) {
+        hideTyping(); sendBtn.disabled = false;
+        var rate = d && d.rates && d.rates[q.to];
+        if (rate) {
+          var out = Math.round(q.amount * rate * 100) / 100;
+          addMsg("**" + q.amount + " " + q.from + " = " + out.toLocaleString("en-US") + " " + q.to + "**\n\n" + L(lang,
+            "আজকের লাইভ রেট: 1 " + q.from + " = " + rate + " " + q.to + (d.time_last_update_utc ? " (সর্বশেষ হালনাগাদ: " + d.time_last_update_utc + ")" : "") + "।\nরেফারেন্স / Source: ExchangeRate-API (open.er-api.com) — রেট দিনে বদলায়, আসল লেনদেনের আগে যাচাই করে নিও।",
+            "Live rate today: 1 " + q.from + " = " + rate + " " + q.to + (d.time_last_update_utc ? " (last updated: " + d.time_last_update_utc + ")" : "") + ".\nReference / Source: ExchangeRate-API (open.er-api.com) — rates move during the day, verify before a real transaction.",
+            "Ajker live rate: 1 " + q.from + " = " + rate + " " + q.to + (d.time_last_update_utc ? " (shorboshesh halnagad: " + d.time_last_update_utc + ")" : "") + ".\nReference / Source: ExchangeRate-API (open.er-api.com) — rate din-e bodlay, asol lenden-er age jachai kore nio."), "bot");
+        } else {
+          addMsg(L(lang, "দুঃখিত — " + q.from + " → " + q.to + "-এর লাইভ রেটটা এখন আনতে পারলাম না। xe.com-এর মতো সাইটে আজকের রেটটা দেখে নাও।", "Sorry — I couldn't fetch a live rate for " + q.from + " → " + q.to + " right now. Check today's rate on a site like xe.com.", "Dukkhito — " + q.from + " → " + q.to + "-er live rate-ta ekhon ante parlam na. xe.com-er moto site-e ajker rate-ta dekhe nao."), "bot");
+        }
+        try { input.focus(); } catch (e) {}
+        drainQueue();
+      }).catch(function () {
+        hideTyping(); sendBtn.disabled = false;
+        addMsg(L(lang, "লাইভ রেট আনতে সমস্যা হলো — ইন্টারনেট সংযোগটা দেখে আবার চেষ্টা করো।", "Couldn't fetch the live rate — check your internet connection and try again.", "Live rate ante somossa holo — internet connection-ta dekhe abar cheshta koro."), "bot");
+        try { input.focus(); } catch (e) {}
+        drainQueue();
+      });
+    }
+
+    /* Intent tests shared by the message router and the queue drainer. */
+    var MEMORY_INTENT = /(remember(\s+that)?|মনে রাখো|মনে রেখো|what do you remember|what do you know about me|আমার সম্পর্কে (কী|কি) মনে আছে|ki mone ache|forget everything|forget all|সব ভুলে যাও|clear (your )?memory|delete (your )?memory)/i;
+    var TIMER_INTENT = /(timer|টাইমার)/i;
+    var MSG_INTENT = /((whatsapp|হোয়াটসঅ্যাপ|whats app|email|e-mail|ইমেইল|gmail).{0,40}(send|পাঠা|patha|পাঠাও|pathao|মেসেজ|message|msg|লিখ|likh|write))|((send|পাঠা|patha|পাঠাও|pathao|লিখে দাও|likhe dao|write).{0,30}(whatsapp|হোয়াটসঅ্যাপ|email|e-mail|ইমেইল))|((send|পাঠা|patha|পাঠাও|pathao)\s+(a\s+)?(message|মেসেজ|msg))|((মেসেজ|message|msg)\s*(পাঠা|patha|send))/i;
+
     /* ================= UI wiring ================= */
     /* Multitasking: while one answer is being prepared, further text messages
        are queued (shown in the chat at once) and answered in order. */
@@ -2688,10 +3230,20 @@
       if (!msgQueue.length || geminiBusy) return;
       var next = msgQueue.shift();
       updateQueueNote();
-      var bb = !!game || !!riddleState || !!docFlow || wantsBangla(next) || wantsEnglish(next) || wantsBanglish(next) || /\bmuse\b|মিউজ/i.test(next);
+      // App tools (image generation, live currency) run in every mode.
+      var qImg = extractImagePrompt(next);
+      if (qImg !== null) {
+        if (!qImg) { imageFlow = true; botSay(L(resolveLang(next), "অবশ্যই আঁকছি! কীসের ছবি আঁকব — বিষয়টা বলো, যেমন: 'বৃষ্টিতে ভেজা একটা গ্রাম' বা 'a cat astronaut'।", "Of course! What should I draw? Tell me the subject — e.g. 'a village in the rain' or 'a cat astronaut'.", "Oboshshoi akchi! Kisher chobi akbo — bishoy-ta bolo, jemon: 'brishtite veja ekta gram' ba 'a cat astronaut'.")); setTimeout(drainQueue, 1700); return; }
+        startImageGen(qImg, resolveLang(next));
+        return;
+      }
+      var qCur = parseCurrencyQuery(next);
+      if (qCur) { startCurrency(qCur, resolveLang(next)); return; }
+      var bb = !!game || !!riddleState || !!docFlow || !!msgFlow || wantsBangla(next) || wantsEnglish(next) || wantsBanglish(next) || /\bmuse\b|মিউজ/i.test(next) || MEMORY_INTENT.test(next) || TIMER_INTENT.test(next) || MSG_INTENT.test(next);
       if (bb) {
         var r = brain(next);
-        botSay(r.text, r.buttons);
+        if (r.hard && !hasGemini()) { researchThenAnswer(next, r); return; }
+        botSay(r.text, r.buttons, r.link);
         setTimeout(drainQueue, 1700);
         return;
       }
@@ -2845,6 +3397,27 @@
           return;
         }
       }
+      // Image generation: "Draw a sunset…" (or the subject reply after
+      // "Draw an image") — a real generated picture, in every mode.
+      if (imageFlow && clean && clean.indexOf("?") === -1 && !/(what can you do|capabilit|help|সাহায্য|stop|cancel|বাদ দাও|থামো)/i.test(clean)) {
+        imageFlow = false;
+        startImageGen(clean, resolveLang(clean));
+        return;
+      }
+      var imgPrompt = extractImagePrompt(clean);
+      if (imgPrompt !== null) {
+        if (!imgPrompt) {
+          imageFlow = true;
+          botSay(L(resolveLang(clean), "অবশ্যই আঁকছি! কীসের ছবি আঁকব — বিষয়টা বলো, যেমন: 'বৃষ্টিতে ভেজা একটা গ্রাম' বা 'a cat astronaut'।", "Of course! What should I draw? Tell me the subject — e.g. 'a village in the rain' or 'a cat astronaut'.", "Oboshshoi akchi! Kisher chobi akbo — bishoy-ta bolo, jemon: 'brishtite veja ekta gram' ba 'a cat astronaut'."));
+          return;
+        }
+        startImageGen(imgPrompt, resolveLang(clean));
+        return;
+      }
+      // Live currency conversion with today's real rate.
+      var curQ = parseCurrencyQuery(clean);
+      if (curQ) { startCurrency(curQ, resolveLang(clean)); return; }
+
       // Famous-person photo request: fetch the real photo from Wikipedia in BOTH modes.
       var photoName = (!imageToSend && !docToSend) ? extractPhotoName(clean) : null;
       if (photoName) {
@@ -2888,7 +3461,7 @@
 
       // If a built-in game / riddle is actively running, or the visitor just
       // asked to switch language, let the built-in brain handle it even in Gemini mode
-      var builtinBusy = !!game || !!riddleState || !!docFlow || wantsBangla(clean) || wantsEnglish(clean) || wantsBanglish(clean) || /\bmuse\b|মিউজ/i.test(clean);
+      var builtinBusy = !!game || !!riddleState || !!docFlow || !!msgFlow || wantsBangla(clean) || wantsEnglish(clean) || wantsBanglish(clean) || /\bmuse\b|মিউজ/i.test(clean) || MEMORY_INTENT.test(clean) || TIMER_INTENT.test(clean) || MSG_INTENT.test(clean);
       if (hasGemini() && !builtinBusy) {
         sendToGemini(clean);
         return;
@@ -2896,7 +3469,8 @@
       sendBtn.disabled = true;
       setTimeout(function () {
         var res = brain(clean);
-        botSay(res.text, res.buttons);
+        if (res.hard && !hasGemini()) { researchThenAnswer(clean, res); return; }
+        botSay(res.text, res.buttons, res.link);
         setTimeout(function () { sendBtn.disabled = false; input.focus(); }, 600);
       }, 250);
     }
@@ -2916,6 +3490,76 @@
       input.style.height = Math.min(input.scrollHeight, 120) + "px";
     });
     document.getElementById("clearBtn").addEventListener("click", startNewChat);
+
+    /* ================= Voice input (microphone) =================
+       Tap the mic, speak in English or Bangla, and the message is typed and
+       sent — powered by the browser's own speech recognition. Hidden when
+       the browser doesn't support it. */
+    var micBtnEl = document.getElementById("micBtn");
+    (function () {
+      var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SR || !micBtnEl) { if (micBtnEl) micBtnEl.style.display = "none"; return; }
+      var recog = null, listening = false;
+      function stopListening() {
+        listening = false;
+        micBtnEl.classList.remove("listening");
+        try { if (recog) recog.stop(); } catch (e) {}
+      }
+      micBtnEl.addEventListener("click", function () {
+        if (listening) { stopListening(); return; }
+        try {
+          recog = new SR();
+          recog.lang = preferredLang === "bn" ? "bn-BD" : "en-US";
+          recog.interimResults = false;
+          recog.maxAlternatives = 1;
+          listening = true;
+          micBtnEl.classList.add("listening");
+          recog.onresult = function (ev) {
+            var transcript = "";
+            try { transcript = ev.results[0][0].transcript || ""; } catch (e) {}
+            stopListening();
+            if (transcript.trim()) {
+              input.value = transcript.trim();
+              input.style.height = "auto";
+              input.style.height = Math.min(input.scrollHeight, 120) + "px";
+              handleUser(transcript, true);
+            }
+          };
+          recog.onerror = function () { stopListening(); };
+          recog.onend = function () { listening = false; micBtnEl.classList.remove("listening"); };
+          recog.start();
+        } catch (e) { stopListening(); }
+      });
+    })();
+
+    /* ================= Settings: memory view / clear ================= */
+    var memoryListEl = document.getElementById("memoryList");
+    var viewMemoryBtn = document.getElementById("viewMemoryBtn");
+    var clearMemoryBtn = document.getElementById("clearMemoryBtn");
+    function renderMemoryList(note) {
+      if (!memoryListEl) return;
+      memoryListEl.classList.add("show");
+      if (!memoryFacts.length) {
+        memoryListEl.textContent = note || "Nothing is saved in memory yet. In the chat, say “Remember that …” and TazAI will keep it here.";
+        return;
+      }
+      memoryListEl.innerHTML = "";
+      var head = document.createElement("div");
+      head.innerHTML = "<strong>What TazAI remembers about you:</strong>";
+      memoryListEl.appendChild(head);
+      var ul = document.createElement("ul");
+      memoryFacts.forEach(function (f) {
+        var li = document.createElement("li");
+        li.textContent = f;
+        ul.appendChild(li);
+      });
+      memoryListEl.appendChild(ul);
+    }
+    if (viewMemoryBtn) viewMemoryBtn.addEventListener("click", function () { renderMemoryList(); });
+    if (clearMemoryBtn) clearMemoryBtn.addEventListener("click", function () {
+      forgetMemory();
+      renderMemoryList("Memory cleared — everything TazAI remembered about you has been erased from this browser.");
+    });
 
     /* ================= Settings (Gemini key) wiring ================= */
     var settingsOverlay = document.getElementById("settingsOverlay");
@@ -2975,7 +3619,7 @@
       });
     });
 
-    var CHIPS = ["Draft an email", "Study plan", "Write a CV", "Summarize a document", "Explain a topic", "Help with code", "YouTube script", "SEO tips", "Civil engineering", "Business ideas", "Translate", "What can you do?"];
+    var CHIPS = ["Draft an email", "Study plan", "Write a CV", "Summarize a document", "Explain a topic", "Help with code", "YouTube script", "SEO tips", "Civil engineering", "Business ideas", "Translate", "WhatsApp message", "Draw an image", "What can you do?"];
     CHIPS.forEach(function (c) {
       var b = document.createElement("button");
       b.type = "button";
@@ -3000,7 +3644,7 @@
     /* ================= PWA: service worker + install ================= */
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", function () {
-        navigator.serviceWorker.register("data:application/javascript;base64,LyogVGF6QUkgc2VydmljZSB3b3JrZXIg4oCUIG9mZmxpbmUgc2hlbGwgZm9yIHRoZSBhcHAuCiAgIFNjb3BlIG5vdGU6IHRoaXMgZmlsZSBsaXZlcyB1bmRlciBhc3NldHMvLCBzbyB0aGUgYnJvd3NlciBsaW1pdHMgaXRzCiAgIHNjb3BlIHRvIHRoYXQgZm9sZGVyOyBpdCBzdGlsbCBwcm92aWRlcyB0aGUgZmV0Y2ggaGFuZGxlciBhbmQgY2FjaGVzCiAgIHRoZSBhcHAgaWNvbnMvbWFuaWZlc3QuIEdlbWluaSBBUEkgY2FsbHMgYXJlIG5ldmVyIGNhY2hlZC4gKi8KdmFyIENBQ0hFID0gInRhemFpLXY3IjsKdmFyIENPUkUgPSBbCiAgIi4vaWNvbi0xOTIucG5nIiwKICAiLi9pY29uLTUxMi5wbmciLAogICIuL2ljb24tbWFza2FibGUtNTEyLnBuZyIsCiAgIi4vYXBwbGUtdG91Y2gtaWNvbi5wbmciLAogICIuL3Byb2ZpbGUucG5nIiwKICAiLi9mYWNlLnBuZyIsCiAgIi4vbWFuaWZlc3Qud2VibWFuaWZlc3QiCl07CgpzZWxmLmFkZEV2ZW50TGlzdGVuZXIoImluc3RhbGwiLCBmdW5jdGlvbiAoZXZlbnQpIHsKICBldmVudC53YWl0VW50aWwoCiAgICBjYWNoZXMub3BlbihDQUNIRSkudGhlbihmdW5jdGlvbiAoY2FjaGUpIHsgcmV0dXJuIGNhY2hlLmFkZEFsbChDT1JFKTsgfSkudGhlbihmdW5jdGlvbiAoKSB7IHJldHVybiBzZWxmLnNraXBXYWl0aW5nKCk7IH0pCiAgKTsKfSk7CgpzZWxmLmFkZEV2ZW50TGlzdGVuZXIoImFjdGl2YXRlIiwgZnVuY3Rpb24gKGV2ZW50KSB7CiAgZXZlbnQud2FpdFVudGlsKAogICAgY2FjaGVzLmtleXMoKS50aGVuKGZ1bmN0aW9uIChrZXlzKSB7CiAgICAgIHJldHVybiBQcm9taXNlLmFsbChrZXlzLm1hcChmdW5jdGlvbiAoaykgeyByZXR1cm4gayA9PT0gQ0FDSEUgPyBudWxsIDogY2FjaGVzLmRlbGV0ZShrKTsgfSkpOwogICAgfSkudGhlbihmdW5jdGlvbiAoKSB7IHJldHVybiBzZWxmLmNsaWVudHMuY2xhaW0oKTsgfSkKICApOwp9KTsKCnNlbGYuYWRkRXZlbnRMaXN0ZW5lcigiZmV0Y2giLCBmdW5jdGlvbiAoZXZlbnQpIHsKICB2YXIgcmVxID0gZXZlbnQucmVxdWVzdDsKICBpZiAocmVxLm1ldGhvZCAhPT0gIkdFVCIpIHJldHVybjsKICB2YXIgdXJsID0gcmVxLnVybCB8fCAiIjsKICAvLyBOZXZlciB0b3VjaCBHZW1pbmkgQVBJIHRyYWZmaWMg4oCUIGFsd2F5cyBsaXZlIGZyb20gdGhlIG5ldHdvcmsuCiAgaWYgKHVybC5pbmRleE9mKCJnZW5lcmF0aXZlbGFuZ3VhZ2UuZ29vZ2xlYXBpcy5jb20iKSAhPT0gLTEpIHJldHVybjsKICAvLyBQYWdlczogbmV0d29yayBmaXJzdCwgZmFsbCBiYWNrIHRvIGNhY2hlIHdoZW4gb2ZmbGluZS4KICBpZiAocmVxLm1vZGUgPT09ICJuYXZpZ2F0ZSIpIHsKICAgIGV2ZW50LnJlc3BvbmRXaXRoKAogICAgICBmZXRjaChyZXEpLnRoZW4oZnVuY3Rpb24gKHJlcykgewogICAgICAgIHZhciBjb3B5ID0gcmVzLmNsb25lKCk7CiAgICAgICAgY2FjaGVzLm9wZW4oQ0FDSEUpLnRoZW4oZnVuY3Rpb24gKGNhY2hlKSB7IGNhY2hlLnB1dChyZXEsIGNvcHkpOyB9KTsKICAgICAgICByZXR1cm4gcmVzOwogICAgICB9KS5jYXRjaChmdW5jdGlvbiAoKSB7CiAgICAgICAgcmV0dXJuIGNhY2hlcy5tYXRjaChyZXEpLnRoZW4oZnVuY3Rpb24gKGhpdCkgeyByZXR1cm4gaGl0IHx8IGNhY2hlcy5tYXRjaCgiLi4vaW5kZXguaHRtbCIpOyB9KTsKICAgICAgfSkKICAgICk7CiAgICByZXR1cm47CiAgfQogIC8vIFN0YXRpYyBhc3NldHM6IGNhY2hlIGZpcnN0LCB0aGVuIG5ldHdvcmsuCiAgZXZlbnQucmVzcG9uZFdpdGgoCiAgICBjYWNoZXMubWF0Y2gocmVxKS50aGVuKGZ1bmN0aW9uIChoaXQpIHsKICAgICAgaWYgKGhpdCkgcmV0dXJuIGhpdDsKICAgICAgcmV0dXJuIGZldGNoKHJlcSkudGhlbihmdW5jdGlvbiAocmVzKSB7CiAgICAgICAgdmFyIGNvcHkgPSByZXMuY2xvbmUoKTsKICAgICAgICBjYWNoZXMub3BlbihDQUNIRSkudGhlbihmdW5jdGlvbiAoY2FjaGUpIHsgY2FjaGUucHV0KHJlcSwgY29weSk7IH0pOwogICAgICAgIHJldHVybiByZXM7CiAgICAgIH0pOwogICAgfSkKICApOwp9KTsK").catch(function () { /* install still offered via manifest in supported browsers */ });
+        navigator.serviceWorker.register("data:application/javascript;base64,LyogVGF6QUkgc2VydmljZSB3b3JrZXIg4oCUIG9mZmxpbmUgc2hlbGwgZm9yIHRoZSBhcHAuCiAgIFNjb3BlIG5vdGU6IHRoaXMgZmlsZSBsaXZlcyB1bmRlciBhc3NldHMvLCBzbyB0aGUgYnJvd3NlciBsaW1pdHMgaXRzCiAgIHNjb3BlIHRvIHRoYXQgZm9sZGVyOyBpdCBzdGlsbCBwcm92aWRlcyB0aGUgZmV0Y2ggaGFuZGxlciBhbmQgY2FjaGVzCiAgIHRoZSBhcHAgaWNvbnMvbWFuaWZlc3QuIEdlbWluaSBBUEkgY2FsbHMgYXJlIG5ldmVyIGNhY2hlZC4gKi8KdmFyIENBQ0hFID0gInRhemFpLXY4IjsKdmFyIENPUkUgPSBbCiAgIi4vaWNvbi0xOTIucG5nIiwKICAiLi9pY29uLTUxMi5wbmciLAogICIuL2ljb24tbWFza2FibGUtNTEyLnBuZyIsCiAgIi4vYXBwbGUtdG91Y2gtaWNvbi5wbmciLAogICIuL3Byb2ZpbGUucG5nIiwKICAiLi9mYWNlLnBuZyIsCiAgIi4vbWFuaWZlc3Qud2VibWFuaWZlc3QiCl07CgpzZWxmLmFkZEV2ZW50TGlzdGVuZXIoImluc3RhbGwiLCBmdW5jdGlvbiAoZXZlbnQpIHsKICBldmVudC53YWl0VW50aWwoCiAgICBjYWNoZXMub3BlbihDQUNIRSkudGhlbihmdW5jdGlvbiAoY2FjaGUpIHsgcmV0dXJuIGNhY2hlLmFkZEFsbChDT1JFKTsgfSkudGhlbihmdW5jdGlvbiAoKSB7IHJldHVybiBzZWxmLnNraXBXYWl0aW5nKCk7IH0pCiAgKTsKfSk7CgpzZWxmLmFkZEV2ZW50TGlzdGVuZXIoImFjdGl2YXRlIiwgZnVuY3Rpb24gKGV2ZW50KSB7CiAgZXZlbnQud2FpdFVudGlsKAogICAgY2FjaGVzLmtleXMoKS50aGVuKGZ1bmN0aW9uIChrZXlzKSB7CiAgICAgIHJldHVybiBQcm9taXNlLmFsbChrZXlzLm1hcChmdW5jdGlvbiAoaykgeyByZXR1cm4gayA9PT0gQ0FDSEUgPyBudWxsIDogY2FjaGVzLmRlbGV0ZShrKTsgfSkpOwogICAgfSkudGhlbihmdW5jdGlvbiAoKSB7IHJldHVybiBzZWxmLmNsaWVudHMuY2xhaW0oKTsgfSkKICApOwp9KTsKCnNlbGYuYWRkRXZlbnRMaXN0ZW5lcigiZmV0Y2giLCBmdW5jdGlvbiAoZXZlbnQpIHsKICB2YXIgcmVxID0gZXZlbnQucmVxdWVzdDsKICBpZiAocmVxLm1ldGhvZCAhPT0gIkdFVCIpIHJldHVybjsKICB2YXIgdXJsID0gcmVxLnVybCB8fCAiIjsKICAvLyBOZXZlciB0b3VjaCBHZW1pbmkgQVBJIHRyYWZmaWMg4oCUIGFsd2F5cyBsaXZlIGZyb20gdGhlIG5ldHdvcmsuCiAgaWYgKHVybC5pbmRleE9mKCJnZW5lcmF0aXZlbGFuZ3VhZ2UuZ29vZ2xlYXBpcy5jb20iKSAhPT0gLTEpIHJldHVybjsKICAvLyBQYWdlczogbmV0d29yayBmaXJzdCwgZmFsbCBiYWNrIHRvIGNhY2hlIHdoZW4gb2ZmbGluZS4KICBpZiAocmVxLm1vZGUgPT09ICJuYXZpZ2F0ZSIpIHsKICAgIGV2ZW50LnJlc3BvbmRXaXRoKAogICAgICBmZXRjaChyZXEpLnRoZW4oZnVuY3Rpb24gKHJlcykgewogICAgICAgIHZhciBjb3B5ID0gcmVzLmNsb25lKCk7CiAgICAgICAgY2FjaGVzLm9wZW4oQ0FDSEUpLnRoZW4oZnVuY3Rpb24gKGNhY2hlKSB7IGNhY2hlLnB1dChyZXEsIGNvcHkpOyB9KTsKICAgICAgICByZXR1cm4gcmVzOwogICAgICB9KS5jYXRjaChmdW5jdGlvbiAoKSB7CiAgICAgICAgcmV0dXJuIGNhY2hlcy5tYXRjaChyZXEpLnRoZW4oZnVuY3Rpb24gKGhpdCkgeyByZXR1cm4gaGl0IHx8IGNhY2hlcy5tYXRjaCgiLi4vaW5kZXguaHRtbCIpOyB9KTsKICAgICAgfSkKICAgICk7CiAgICByZXR1cm47CiAgfQogIC8vIFN0YXRpYyBhc3NldHM6IGNhY2hlIGZpcnN0LCB0aGVuIG5ldHdvcmsuCiAgZXZlbnQucmVzcG9uZFdpdGgoCiAgICBjYWNoZXMubWF0Y2gocmVxKS50aGVuKGZ1bmN0aW9uIChoaXQpIHsKICAgICAgaWYgKGhpdCkgcmV0dXJuIGhpdDsKICAgICAgcmV0dXJuIGZldGNoKHJlcSkudGhlbihmdW5jdGlvbiAocmVzKSB7CiAgICAgICAgdmFyIGNvcHkgPSByZXMuY2xvbmUoKTsKICAgICAgICBjYWNoZXMub3BlbihDQUNIRSkudGhlbihmdW5jdGlvbiAoY2FjaGUpIHsgY2FjaGUucHV0KHJlcSwgY29weSk7IH0pOwogICAgICAgIHJldHVybiByZXM7CiAgICAgIH0pOwogICAgfSkKICApOwp9KTsK").catch(function () { /* install still offered via manifest in supported browsers */ });
       });
     }
     var deferredInstallPrompt = null;
