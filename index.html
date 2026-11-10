@@ -1443,7 +1443,9 @@
       "5) For health, legal, financial or safety-critical questions, add a short note that the user should verify with a qualified professional or official source before acting.",
       "6) Simple chat, greetings, jokes, stories, games, motivation and personal small talk do NOT need a reference section — keep those light and friendly. References are for hard/factual questions.",
       "RESEARCH IN THIS APP: this app DOES research the live web — it is NOT Wikipedia-only. You are connected to Gemini by default through TazAI's own connection (if a visitor adds their own Gemini key, that key is used directly instead), and with it to Google Search: search Google live for factual and time-sensitive questions, answer from what you find, and end with the 'Reference:' section listing the real source pages you used (the app also appends your Google Search sources automatically). If the Gemini connection ever fails, the app itself researches the whole web for the user (Google, DuckDuckGo and Wikipedia together) and shows the sources. For time-sensitive facts (today's news, current prices, current openings), rely on the live search results and name the source — never present old data as live.",
-      "APP POWERS — BUILT INTO THIS APP (never deny them): (a) IMAGE GENERATION: when the user asks to draw / paint / generate / create an image, this app generates the picture itself and shows it in the chat — if such a request reaches you as text, respond as the artist: confirm warmly and describe the image concept you are creating for them; (b) FAMOUS-PERSON PHOTOS: the app shows real Wikipedia photos with source links on request; (c) PERSONAL MEMORY: facts the user asked TazAI to remember are stored in this browser and given to you under a 'PERSONAL MEMORY' heading when present — use them naturally (their name, studies, plans, preferences) and confirm warmly when the user asks you to remember something new, because the app does save it; (d) LIVE TOOLS in the app: live currency conversion with today's rates, live Google Search research through the Gemini connection (on by default for every visitor) and live whole-web research (Google, DuckDuckGo and Wikipedia) as the built-in fallback, unit conversion and timers — these are handled by the app itself; (e) SENDING MESSAGES: the app drafts WhatsApp and email messages for the user and gives them a ready, prefilled one-tap link (wa.me / mailto) — their own WhatsApp/email app opens with the message filled in and THEY press Send there. Be clear about this: you prepare everything, the final send tap is the user's. NEVER claim you sent a message yourself, and never say messaging is impossible — offer it exactly this way."
+      "APP POWERS — BUILT INTO THIS APP (never deny them): (a) IMAGE GENERATION: when the user asks to draw / paint / generate / create an image, this app generates the picture itself and shows it in the chat — if such a request reaches you as text, respond as the artist: confirm warmly and describe the image concept you are creating for them; (b) FAMOUS-PERSON PHOTOS: the app shows real Wikipedia photos with source links on request; (c) PERSONAL MEMORY: facts the user asked TazAI to remember are stored in this browser and given to you under a 'PERSONAL MEMORY' heading when present — use them naturally (their name, studies, plans, preferences) and confirm warmly when the user asks you to remember something new, because the app does save it; (d) LIVE TOOLS in the app: live currency conversion with today's rates, live Google Search research through the Gemini connection (on by default for every visitor) and live whole-web research (Google, DuckDuckGo and Wikipedia) as the built-in fallback, unit conversion and timers — these are handled by the app itself; (e) SENDING MESSAGES: the app drafts WhatsApp and email messages for the user and gives them a ready, prefilled one-tap link (wa.me / mailto) — their own WhatsApp/email app opens with the message filled in and THEY press Send there. Be clear about this: you prepare everything, the final send tap is the user's. NEVER claim you sent a message yourself, and never say messaging is impossible — offer it exactly this way.",
+      "FAST + ACCURATE — TazAI IS MADE FOR STUDENTS: TazAI's users are students — study help, homework, explanations and exam preparation are the core job. Answer FAST and SHORT: no filler, no padding, no repeating the question back, no long introductions. But speed NEVER beats correctness — a wrong answer harms a student's exam. For every factual, homework or exam question (names, dates, numbers, definitions, formulas, science facts): be certain BEFORE you answer — use the live Google Search results, cross-check them, and end with the Reference section naming the real source. If you are not sure, say so honestly in one short line and name where to verify it (e.g. the NCTB textbook) — NEVER guess, invent or bluff on a school question. For maths and science problems, solve step by step with the short working shown, then give the final answer clearly — the student must be able to LEARN the method, not just copy the result. Keep every answer as short as the question allows, in the student's own language (Bangla / English / Banglish, exactly as they write).",
+      "EXPLAIN ANY DIFFICULT TOPIC SIMPLY — THE ONE-READ TEST: whatever the topic, explain it so that a student understands it in ONE reading, without effort. Break every hard topic into small easy pieces: simple everyday words, one idea per step, and a familiar everyday example or analogy for each hard idea. Start from what the student already knows, then add one new layer at a time. When a structure helps the student SEE the idea, use one right in the chat: a small TABLE when comparing things side by side (e.g. mitosis vs meiosis, acid vs base, past vs present tense), BOXES for steps and flows (one step per line inside a simple box, arrows showing the order), or a short numbered list for a process. Prefer that visual structure over a long paragraph whenever the topic has parts, steps, types or comparisons. Keep it in the student's own language — and keep it short: simple beats long, every time."
     ].join("\n");
     function hasGemini() { return !!geminiKey || !!TAZAI_PROXY_URL; }
     function saveGeminiKeyToStorage(k) {
@@ -1508,11 +1510,12 @@
       // Google Search grounding: for plain chat questions (useSearch) Gemini
       // searches the WHOLE Google web index live — not just Wikipedia — and
       // the real source pages it used are appended to the reply below. If the
-      // grounded call fails — a model rejecting the search tool (400) or the
-      // search quota being used up (429) — the call retries once WITHOUT the
-      // search tool, so the reply still comes from Gemini instead of
-      // failing; if that fails too, the error propagates and the caller's
-      // built-in fallback (whole-web research / built-in brain) answers.
+      // grounded call fails — a model rejecting the search tool (400) — the
+      // call retries once WITHOUT the search tool, so the reply still comes
+      // from Gemini instead of failing. A 429 fails fast with no retry, and
+      // every attempt shares one overall deadline, so any failure reaches
+      // the caller's built-in fallback (whole-web research / built-in
+      // brain) quickly instead of keeping the visitor waiting.
       var viaProxy = !keyToUse;
       var searchOn = !!useSearch;
       function buildPayload(model) {
@@ -1526,7 +1529,19 @@
         return payload;
       }
       var modelIdx = 0;
+      // One overall deadline for the WHOLE call: retries and model
+      // fallbacks share the same time budget, so a slow or failing
+      // Gemini can never keep the visitor waiting attempt after attempt —
+      // when the budget runs out the caller's fast built-in fallback
+      // (whole-web research / built-in brain) takes over at once.
+      var deadline = Date.now() + (timeoutMs || 30000);
       function tryModel() {
+        var remain = deadline - Date.now();
+        if (remain <= 0) {
+          var derr = new Error("Timed out — Gemini took too long to answer. Please try again.");
+          derr.isGeminiError = true;
+          return Promise.reject(derr);
+        }
         var model = GEMINI_MODELS[modelIdx];
         var url = viaProxy
           ? TAZAI_PROXY_URL
@@ -1535,7 +1550,7 @@
         if (!viaProxy) headers["x-goog-api-key"] = keyToUse;
         var controller = (typeof AbortController !== "undefined") ? new AbortController() : null;
         var timer = null;
-        if (controller) timer = setTimeout(function () { try { controller.abort(); } catch (e) {} }, timeoutMs || 30000);
+        if (controller) timer = setTimeout(function () { try { controller.abort(); } catch (e) {} }, remain);
         var opts = {
           method: "POST",
           headers: headers,
@@ -1546,10 +1561,12 @@
           if (timer) clearTimeout(timer);
           return res.text().then(function (txt) {
             if (!res.ok) {
-              // Grounding degrades, never fails the reply: a rejected search
-              // tool (400) or an exhausted search quota (429) retries once
-              // without the tool, so Gemini still answers.
-              if (searchOn && (res.status === 400 || res.status === 429)) { searchOn = false; return tryModel(); }
+              // A rejected search tool (400) retries once without the tool,
+              // so Gemini still answers. A 429 (quota / rate limit) fails
+              // FAST instead — no slow retry against an exhausted quota;
+              // the error propagates at once and the caller's built-in
+              // whole-web research / brain fallback answers immediately.
+              if (searchOn && res.status === 400) { searchOn = false; return tryModel(); }
               // Try the next model when this one is gone (404) or overloaded (503)
               if ((res.status === 404 || res.status === 503) && modelIdx < GEMINI_MODELS.length - 1) {
                 modelIdx++;
@@ -1622,7 +1639,7 @@
         ? "[Language choice: the user is writing in Banglish (romanized Bengali) — reply in Banglish only: Bengali words in Latin/English letters, no Bengali script.] "
         : "[Language choice: reply in English unless the user asks for Bengali or Banglish.] ";
       contents.push({ role: "user", parts: [{ text: langNote + userText }] });
-      callGeminiApi(geminiKey, contents, 30000, true).then(function (reply) {
+      callGeminiApi(geminiKey, contents, 15000, true).then(function (reply) {
         geminiHistory.push({ role: "user", parts: [{ text: userText }] });
         geminiHistory.push({ role: "model", parts: [{ text: reply }] });
         // Keep last 30 turns (60 messages) so TazAI remembers more of the conversation
@@ -2121,7 +2138,7 @@
     }
     function botSay(text, buttons, link) {
       showTyping();
-      var delay = Math.min(500 + text.length * 6, 1500);
+      var delay = Math.min(280 + text.length * 3, 850);
       setTimeout(function () {
         hideTyping();
         addMsg(text, "bot", buttons, null, null, link ? { link: link } : null);
@@ -2569,6 +2586,94 @@
         if (pos !== s.length || typeof out !== "number" || !isFinite(out)) return null;
         return Math.round(out * 1e10) / 1e10;
       } catch (e) { return null; }
+    }
+
+    /* Same safe parser, but it records each combine step in evaluation
+       order (brackets → ×/÷ → +/−), so a calculation can show its short
+       working — exactly what a student needs to learn the method. */
+    function evalMathTraced(src) {
+      var s = src.replace(/\s+/g, "").replace(/×/g, "*").replace(/÷/g, "/").replace(/,/g, "");
+      if (!/^[0-9+\-*/%.()]+$/.test(s) || s.length > 60) return null;
+      var pos = 0, steps = [];
+      function fmtN(n) { return String(Math.round(n * 1e10) / 1e10); }
+      function peek() { return s[pos]; }
+      function parseExprT() {
+        var v = parseTermT();
+        while (peek() === "+" || peek() === "-") {
+          var op = s[pos++]; var r = parseTermT();
+          var nv = op === "+" ? v + r : v - r;
+          steps.push(fmtN(v) + " " + op + " " + fmtN(r) + " = " + fmtN(nv));
+          v = nv;
+        }
+        return v;
+      }
+      function parseTermT() {
+        var v = parseFactorT();
+        while (peek() === "*" || peek() === "/" || peek() === "%") {
+          var op = s[pos++]; var r = parseFactorT();
+          var nv;
+          if (op === "*") nv = v * r;
+          else if (op === "/") { if (r === 0) throw new Error("div0"); nv = v / r; }
+          else nv = v % r;
+          steps.push(fmtN(v) + " " + (op === "*" ? "×" : op === "/" ? "÷" : "%") + " " + fmtN(r) + " = " + fmtN(nv));
+          v = nv;
+        }
+        return v;
+      }
+      function parseFactorT() {
+        if (peek() === "-") { pos++; return -parseFactorT(); }
+        if (peek() === "+") { pos++; return parseFactorT(); }
+        if (peek() === "(") {
+          pos++; var v = parseExprT();
+          if (peek() !== ")") throw new Error("paren");
+          pos++; return v;
+        }
+        var start = pos;
+        while (pos < s.length && /[0-9.]/.test(s[pos])) pos++;
+        if (start === pos) throw new Error("num");
+        return parseFloat(s.slice(start, pos));
+      }
+      try {
+        var out = parseExprT();
+        if (pos !== s.length || typeof out !== "number" || !isFinite(out)) return null;
+        return { value: Math.round(out * 1e10) / 1e10, steps: steps };
+      } catch (e) { return null; }
+    }
+
+    /* Fast math fast-path: a message that is plainly ONE calculation — a
+       pure arithmetic expression ("25 * 4 + 10", "(120 + 80) / 5") or a
+       percent-of ("20% of 500") — is solved locally by the exact parser
+       above, instantly and always correctly, in EVERY mode. It is never
+       sent to Gemini (slow, and a model can slip on arithmetic) and never
+       researched. Returns the reply text, or null when the message is not
+       a plain calculation, so all other routing stays untouched. */
+    function tryFastMath(text) {
+      var raw = (text || "").trim();
+      if (!raw || raw.length > 80) return null;
+      var lang = resolveLang(raw);
+      var t = raw.replace(/\?\s*$/, "").trim();
+      var pm = t.match(/^(?:what is|how much is|calculate|compute|solve)?\s*(\d+(?:\.\d+)?)\s*(?:%|percent)\s*of\s*(\d+(?:\.\d+)?)\s*$/i);
+      if (pm) {
+        var pv = Math.round((parseFloat(pm[1]) / 100) * parseFloat(pm[2]) * 1e10) / 1e10;
+        return L(lang,
+          "**" + pm[2] + "-এর " + pm[1] + "% = " + pv + "**\nহিসাব: " + pm[2] + " × " + pm[1] + " ÷ 100 = " + pv,
+          "**" + pm[1] + "% of " + pm[2] + " = " + pv + "**\nWorking: " + pm[2] + " × " + pm[1] + " ÷ 100 = " + pv,
+          "**" + pm[2] + "-er " + pm[1] + "% = " + pv + "**\nHishab: " + pm[2] + " × " + pm[1] + " ÷ 100 = " + pv);
+      }
+      var core = t.replace(/^(what is|how much is|calculate|compute|solve)\s+/i, "");
+      if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(core)) return null; // a date is not a sum
+      if (/^[0-9\s+\-*/%.()×÷]+$/.test(core) && /[+\-*/×÷]/.test(core) && /[0-9]/.test(core)) {
+        var tr = evalMathTraced(core);
+        if (tr) {
+          var exprShow = core.replace(/\s+/g, " ").trim();
+          var work = tr.steps.length ? tr.steps.slice(0, 4).join(" → ") : "";
+          return L(lang,
+            "**" + exprShow + " = " + tr.value + "**" + (work ? "\nহিসাব: " + work : ""),
+            "**" + exprShow + " = " + tr.value + "**" + (work ? "\nWorking: " + work : ""),
+            "**" + exprShow + " = " + tr.value + "**" + (work ? "\nHishab: " + work : ""));
+        }
+      }
+      return null;
     }
 
     /* ================= Unit converter ================= */
@@ -3690,7 +3795,7 @@
     }
     function wikiJson(url, timeoutMs) {
       var controller = (typeof AbortController !== "undefined") ? new AbortController() : null;
-      var timer = controller ? setTimeout(function () { try { controller.abort(); } catch (e) {} }, timeoutMs || 15000) : null;
+      var timer = controller ? setTimeout(function () { try { controller.abort(); } catch (e) {} }, timeoutMs || 10000) : null;
       var opts = controller ? { signal: controller.signal } : {};
       return fetch(url, opts).then(function (res) {
         if (timer) clearTimeout(timer);
@@ -3699,10 +3804,10 @@
       });
     }
     function wikiSummary(lang, title) {
-      return wikiJson("https://" + lang + ".wikipedia.org/api/rest_v1/page/summary/" + encodeURIComponent(String(title).replace(/\s+/g, "_")), 15000);
+      return wikiJson("https://" + lang + ".wikipedia.org/api/rest_v1/page/summary/" + encodeURIComponent(String(title).replace(/\s+/g, "_")), 10000);
     }
     function wikiSearchTitles(lang, q) {
-      return wikiJson("https://" + lang + ".wikipedia.org/w/api.php?action=query&list=search&srsearch=" + encodeURIComponent(q) + "&srlimit=3&format=json&origin=*", 15000)
+      return wikiJson("https://" + lang + ".wikipedia.org/w/api.php?action=query&list=search&srsearch=" + encodeURIComponent(q) + "&srlimit=3&format=json&origin=*", 10000)
         .then(function (d) {
           var arr = (d && d.query && d.query.search) || [];
           var out = [];
@@ -3808,7 +3913,7 @@
     // ("The current officeholder is Emmanuel Macron…"). Research answers
     // prefer whichever of the two texts says more.
     function wikiIntro(lang, title) {
-      return wikiJson("https://" + lang + ".wikipedia.org/w/api.php?action=query&prop=extracts&explaintext=1&exintro=1&redirects=1&titles=" + encodeURIComponent(String(title).replace(/_/g, " ")) + "&format=json&origin=*", 15000)
+      return wikiJson("https://" + lang + ".wikipedia.org/w/api.php?action=query&prop=extracts&explaintext=1&exintro=1&redirects=1&titles=" + encodeURIComponent(String(title).replace(/_/g, " ")) + "&format=json&origin=*", 10000)
         .then(function (d) {
           var pages = (d && d.query && d.query.pages) || {};
           var keys = Object.keys(pages);
@@ -3865,7 +3970,7 @@
     // key needed and it allows cross-origin reads from this page.
     function ddgSearch(topic) {
       if (!topic) return Promise.resolve(null);
-      return wikiJson("https://api.duckduckgo.com/?q=" + encodeURIComponent(topic) + "&format=json&no_html=1&skip_disambig=1", 12000).then(function (d) {
+      return wikiJson("https://api.duckduckgo.com/?q=" + encodeURIComponent(topic) + "&format=json&no_html=1&skip_disambig=1", 10000).then(function (d) {
         if (!d) return null;
         var rel = [];
         function walk(list) {
@@ -3927,8 +4032,25 @@
         "I researched this live across the whole web 🔎\n\n" + body + "\n\nAsk a follow-up about this topic any time — or connect the free Gemini key in Settings and Gemini will search Google directly for even deeper answers.",
         "Puro web theke live gobeshona kore uttor-ta pelam 🔎\n\n" + body + "\n\nAro jante chaile ei bishoyer onno proshno koro — othoba Settings-e free Gemini Key boshale Gemini shorashori Google Search kore aro govir uttor debe.");
     }
+    // Session research cache: asking the SAME factual question twice in
+    // one visit must not research the whole web twice — the verified,
+    // sourced answer is replayed instantly. In-memory only (this tab).
+    var researchCache = {};
     function researchThenAnswer(text, fallbackRes) {
       var lang = resolveLang(text);
+      var cacheKey = (text || "").trim().toLowerCase().replace(/\s+/g, " ");
+      if (cacheKey && researchCache[cacheKey]) {
+        showTyping(workSteps("text"));
+        var cachedText = researchCache[cacheKey];
+        setTimeout(function () {
+          hideTyping();
+          sendBtn.disabled = false;
+          addMsg(cachedText, "bot");
+          try { input.focus(); } catch (e) {}
+          drainQueue();
+        }, 350);
+        return;
+      }
       showTyping(workSteps("text"));
       var topic = extractTopic(text);
       // Only shown when the whole web genuinely has nothing reliable: the
@@ -3941,8 +4063,10 @@
         "Tumi nije shorashori khuje dekhte paro — Google-e ei bishoy-ta: https://www.google.com/search?q=" + encodeURIComponent(topic) + " · Wikipedia: https://en.wikipedia.org/w/index.php?search=" + encodeURIComponent(topic));
       var wikiChain = researchWiki(topic, text).then(function (sum) {
         if (!sum) return null;
-        // Enrich with the full intro when it says more than the short REST
-        // extract — that is where "who" answers name the actual person.
+        // Enrich with the full intro only when the REST extract is short —
+        // that is where "who" answers name the actual person. A summary
+        // that already says plenty skips the extra round-trip (speed).
+        if (String(sum.extract || "").replace(/\s+/g, " ").trim().length >= 500) return sum;
         return wikiIntro(sum._lang || "en", sum.title).then(function (intro) {
           if (intro && intro.replace(/\s+/g, " ").trim().length > String(sum.extract || "").replace(/\s+/g, " ").trim().length) sum.extract = intro;
           return sum;
@@ -3952,7 +4076,11 @@
         hideTyping();
         sendBtn.disabled = false;
         var wikiSum = res[0], ddg = res[1];
-        if (wikiSum || ddg) addMsg(formatWebResearch(wikiSum, ddg, topic, lang), "bot");
+        if (wikiSum || ddg) {
+          var ansText = formatWebResearch(wikiSum, ddg, topic, lang);
+          if (cacheKey) researchCache[cacheKey] = ansText;
+          addMsg(ansText, "bot");
+        }
         else addMsg(notFoundText, "bot", fallbackRes.buttons);
         try { input.focus(); } catch (e) {}
         drainQueue();
@@ -4093,13 +4221,15 @@
       }
       var qCur = parseCurrencyQuery(next);
       if (qCur) { startCurrency(qCur, resolveLang(next)); return; }
+      var qFastMath = (!game && !riddleState && !docFlow && !msgFlow && !imageFlow) ? tryFastMath(next) : null;
+      if (qFastMath) { botSay(qFastMath); setTimeout(drainQueue, 900); return; }
       // Queued messages keep the same routing as fresh ones: a queued
       // chip is answered by the built-in brain, and a queued reply to
       // "Which topic?" explains that topic — never a photo, never Gemini
       // improvising on a canned label.
       if (explainFlow && !isChipLabel(next)) {
         explainFlow = false;
-        if (hasGemini()) { sendToGemini("Explain this topic simply and clearly, step by step, with a short example at the end: " + next); return; }
+        if (hasGemini()) { sendToGemini("Explain this topic to a student in very simple words, broken into small steps, with an everyday example; use a small comparison table or a boxed step-flow if that makes it clearer, and keep it short: " + next); return; }
         researchThenAnswer(next, brain("What is " + next + "?"));
         return;
       }
@@ -4338,6 +4468,18 @@
       var curQ = parseCurrencyQuery(clean);
       if (curQ) { startCurrency(curQ, resolveLang(clean)); return; }
 
+      // Pure arithmetic: solved locally by the exact built-in parser —
+      // instant and always correct in every mode; never sent to Gemini,
+      // never researched. Skipped while a game/flow owns the input.
+      if (!game && !riddleState && !docFlow && !msgFlow && !imageFlow) {
+        var fastMath = tryFastMath(clean);
+        if (fastMath) {
+          explainFlow = false;
+          botSay(fastMath);
+          return;
+        }
+      }
+
       // "Explain a topic" follow-up: the visitor just named the topic.
       // Explain THAT topic — in Gemini mode via Gemini with the topic
       // pinned in the instruction, in built-in mode via live research.
@@ -4347,7 +4489,7 @@
         explainFlow = false;
         if (!/^(stop|cancel|বাদ দাও|থামো)\b/i.test(clean)) {
           if (hasGemini()) {
-            sendToGemini("Explain this topic simply and clearly, step by step, with a short example at the end: " + clean);
+            sendToGemini("Explain this topic to a student in very simple words, broken into small steps, with an everyday example; use a small comparison table or a boxed step-flow if that makes it clearer, and keep it short: " + clean);
           } else {
             researchThenAnswer(clean, brain("What is " + clean + "?"));
           }
@@ -4367,7 +4509,7 @@
           if (cres.hard && !hasGemini()) { researchThenAnswer(clean, cres); return; }
           botSay(cres.text, cres.buttons, cres.link);
           setTimeout(function () { sendBtn.disabled = false; try { input.focus(); } catch (e) {} }, 400);
-        }, 250);
+        }, 100);
         return;
       }
 
@@ -4429,7 +4571,7 @@
         if (res.hard && !hasGemini()) { researchThenAnswer(clean, res); return; }
         botSay(res.text, res.buttons, res.link);
         setTimeout(function () { sendBtn.disabled = false; input.focus(); }, 600);
-      }, 250);
+      }, 100);
     }
 
     form.addEventListener("submit", function (e) {
@@ -4721,7 +4863,7 @@
     /* ================= PWA: service worker + install ================= */
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", function () {
-        navigator.serviceWorker.register("data:application/javascript;base64,LyogVGF6QUkgc2VydmljZSB3b3JrZXIg4oCUIG9mZmxpbmUgc2hlbGwgZm9yIHRoZSBhcHAuCiAgIFNjb3BlIG5vdGU6IHRoaXMgZmlsZSBsaXZlcyB1bmRlciBhc3NldHMvLCBzbyB0aGUgYnJvd3NlciBsaW1pdHMgaXRzCiAgIHNjb3BlIHRvIHRoYXQgZm9sZGVyOyBpdCBzdGlsbCBwcm92aWRlcyB0aGUgZmV0Y2ggaGFuZGxlciBhbmQgY2FjaGVzCiAgIHRoZSBhcHAgaWNvbnMvbWFuaWZlc3QuIEdlbWluaSBBUEkgY2FsbHMgYXJlIG5ldmVyIGNhY2hlZC4gKi8KdmFyIENBQ0hFID0gInRhemFpLXYxOSI7CnZhciBDT1JFID0gWwogICIuL2ljb24tMTkyLnBuZyIsCiAgIi4vaWNvbi01MTIucG5nIiwKICAiLi9pY29uLW1hc2thYmxlLTUxMi5wbmciLAogICIuL2FwcGxlLXRvdWNoLWljb24ucG5nIiwKICAiLi9wcm9maWxlLnBuZyIsCiAgIi4vZmFjZS5wbmciLAogICIuL21hbmlmZXN0LndlYm1hbmlmZXN0IgpdOwoKc2VsZi5hZGRFdmVudExpc3RlbmVyKCJpbnN0YWxsIiwgZnVuY3Rpb24gKGV2ZW50KSB7CiAgZXZlbnQud2FpdFVudGlsKAogICAgY2FjaGVzLm9wZW4oQ0FDSEUpLnRoZW4oZnVuY3Rpb24gKGNhY2hlKSB7IHJldHVybiBjYWNoZS5hZGRBbGwoQ09SRSk7IH0pLnRoZW4oZnVuY3Rpb24gKCkgeyByZXR1cm4gc2VsZi5za2lwV2FpdGluZygpOyB9KQogICk7Cn0pOwoKc2VsZi5hZGRFdmVudExpc3RlbmVyKCJhY3RpdmF0ZSIsIGZ1bmN0aW9uIChldmVudCkgewogIGV2ZW50LndhaXRVbnRpbCgKICAgIGNhY2hlcy5rZXlzKCkudGhlbihmdW5jdGlvbiAoa2V5cykgewogICAgICByZXR1cm4gUHJvbWlzZS5hbGwoa2V5cy5tYXAoZnVuY3Rpb24gKGspIHsgcmV0dXJuIGsgPT09IENBQ0hFID8gbnVsbCA6IGNhY2hlcy5kZWxldGUoayk7IH0pKTsKICAgIH0pLnRoZW4oZnVuY3Rpb24gKCkgeyByZXR1cm4gc2VsZi5jbGllbnRzLmNsYWltKCk7IH0pCiAgKTsKfSk7CgpzZWxmLmFkZEV2ZW50TGlzdGVuZXIoImZldGNoIiwgZnVuY3Rpb24gKGV2ZW50KSB7CiAgdmFyIHJlcSA9IGV2ZW50LnJlcXVlc3Q7CiAgaWYgKHJlcS5tZXRob2QgIT09ICJHRVQiKSByZXR1cm47CiAgdmFyIHVybCA9IHJlcS51cmwgfHwgIiI7CiAgLy8gTmV2ZXIgdG91Y2ggR2VtaW5pIEFQSSB0cmFmZmljIOKAlCBhbHdheXMgbGl2ZSBmcm9tIHRoZSBuZXR3b3JrLgogIGlmICh1cmwuaW5kZXhPZigiZ2VuZXJhdGl2ZWxhbmd1YWdlLmdvb2dsZWFwaXMuY29tIikgIT09IC0xKSByZXR1cm47CiAgLy8gUGFnZXM6IG5ldHdvcmsgZmlyc3QsIGZhbGwgYmFjayB0byBjYWNoZSB3aGVuIG9mZmxpbmUuCiAgaWYgKHJlcS5tb2RlID09PSAibmF2aWdhdGUiKSB7CiAgICBldmVudC5yZXNwb25kV2l0aCgKICAgICAgZmV0Y2gocmVxKS50aGVuKGZ1bmN0aW9uIChyZXMpIHsKICAgICAgICB2YXIgY29weSA9IHJlcy5jbG9uZSgpOwogICAgICAgIGNhY2hlcy5vcGVuKENBQ0hFKS50aGVuKGZ1bmN0aW9uIChjYWNoZSkgeyBjYWNoZS5wdXQocmVxLCBjb3B5KTsgfSk7CiAgICAgICAgcmV0dXJuIHJlczsKICAgICAgfSkuY2F0Y2goZnVuY3Rpb24gKCkgewogICAgICAgIHJldHVybiBjYWNoZXMubWF0Y2gocmVxKS50aGVuKGZ1bmN0aW9uIChoaXQpIHsgcmV0dXJuIGhpdCB8fCBjYWNoZXMubWF0Y2goIi4uL2luZGV4Lmh0bWwiKTsgfSk7CiAgICAgIH0pCiAgICApOwogICAgcmV0dXJuOwogIH0KICAvLyBTdGF0aWMgYXNzZXRzOiBjYWNoZSBmaXJzdCwgdGhlbiBuZXR3b3JrLgogIGV2ZW50LnJlc3BvbmRXaXRoKAogICAgY2FjaGVzLm1hdGNoKHJlcSkudGhlbihmdW5jdGlvbiAoaGl0KSB7CiAgICAgIGlmIChoaXQpIHJldHVybiBoaXQ7CiAgICAgIHJldHVybiBmZXRjaChyZXEpLnRoZW4oZnVuY3Rpb24gKHJlcykgewogICAgICAgIHZhciBjb3B5ID0gcmVzLmNsb25lKCk7CiAgICAgICAgY2FjaGVzLm9wZW4oQ0FDSEUpLnRoZW4oZnVuY3Rpb24gKGNhY2hlKSB7IGNhY2hlLnB1dChyZXEsIGNvcHkpOyB9KTsKICAgICAgICByZXR1cm4gcmVzOwogICAgICB9KTsKICAgIH0pCiAgKTsKfSk7Cg==").catch(function () { /* install still offered via manifest in supported browsers */ });
+        navigator.serviceWorker.register("data:application/javascript;base64,LyogVGF6QUkgc2VydmljZSB3b3JrZXIg4oCUIG9mZmxpbmUgc2hlbGwgZm9yIHRoZSBhcHAuCiAgIFNjb3BlIG5vdGU6IHRoaXMgZmlsZSBsaXZlcyB1bmRlciBhc3NldHMvLCBzbyB0aGUgYnJvd3NlciBsaW1pdHMgaXRzCiAgIHNjb3BlIHRvIHRoYXQgZm9sZGVyOyBpdCBzdGlsbCBwcm92aWRlcyB0aGUgZmV0Y2ggaGFuZGxlciBhbmQgY2FjaGVzCiAgIHRoZSBhcHAgaWNvbnMvbWFuaWZlc3QuIEdlbWluaSBBUEkgY2FsbHMgYXJlIG5ldmVyIGNhY2hlZC4gKi8KdmFyIENBQ0hFID0gInRhemFpLXYyMCI7CnZhciBDT1JFID0gWwogICIuL2ljb24tMTkyLnBuZyIsCiAgIi4vaWNvbi01MTIucG5nIiwKICAiLi9pY29uLW1hc2thYmxlLTUxMi5wbmciLAogICIuL2FwcGxlLXRvdWNoLWljb24ucG5nIiwKICAiLi9wcm9maWxlLnBuZyIsCiAgIi4vZmFjZS5wbmciLAogICIuL21hbmlmZXN0LndlYm1hbmlmZXN0IgpdOwoKc2VsZi5hZGRFdmVudExpc3RlbmVyKCJpbnN0YWxsIiwgZnVuY3Rpb24gKGV2ZW50KSB7CiAgZXZlbnQud2FpdFVudGlsKAogICAgY2FjaGVzLm9wZW4oQ0FDSEUpLnRoZW4oZnVuY3Rpb24gKGNhY2hlKSB7IHJldHVybiBjYWNoZS5hZGRBbGwoQ09SRSk7IH0pLnRoZW4oZnVuY3Rpb24gKCkgeyByZXR1cm4gc2VsZi5za2lwV2FpdGluZygpOyB9KQogICk7Cn0pOwoKc2VsZi5hZGRFdmVudExpc3RlbmVyKCJhY3RpdmF0ZSIsIGZ1bmN0aW9uIChldmVudCkgewogIGV2ZW50LndhaXRVbnRpbCgKICAgIGNhY2hlcy5rZXlzKCkudGhlbihmdW5jdGlvbiAoa2V5cykgewogICAgICByZXR1cm4gUHJvbWlzZS5hbGwoa2V5cy5tYXAoZnVuY3Rpb24gKGspIHsgcmV0dXJuIGsgPT09IENBQ0hFID8gbnVsbCA6IGNhY2hlcy5kZWxldGUoayk7IH0pKTsKICAgIH0pLnRoZW4oZnVuY3Rpb24gKCkgeyByZXR1cm4gc2VsZi5jbGllbnRzLmNsYWltKCk7IH0pCiAgKTsKfSk7CgpzZWxmLmFkZEV2ZW50TGlzdGVuZXIoImZldGNoIiwgZnVuY3Rpb24gKGV2ZW50KSB7CiAgdmFyIHJlcSA9IGV2ZW50LnJlcXVlc3Q7CiAgaWYgKHJlcS5tZXRob2QgIT09ICJHRVQiKSByZXR1cm47CiAgdmFyIHVybCA9IHJlcS51cmwgfHwgIiI7CiAgLy8gTmV2ZXIgdG91Y2ggR2VtaW5pIEFQSSB0cmFmZmljIOKAlCBhbHdheXMgbGl2ZSBmcm9tIHRoZSBuZXR3b3JrLgogIGlmICh1cmwuaW5kZXhPZigiZ2VuZXJhdGl2ZWxhbmd1YWdlLmdvb2dsZWFwaXMuY29tIikgIT09IC0xKSByZXR1cm47CiAgLy8gUGFnZXM6IG5ldHdvcmsgZmlyc3QsIGZhbGwgYmFjayB0byBjYWNoZSB3aGVuIG9mZmxpbmUuCiAgaWYgKHJlcS5tb2RlID09PSAibmF2aWdhdGUiKSB7CiAgICBldmVudC5yZXNwb25kV2l0aCgKICAgICAgZmV0Y2gocmVxKS50aGVuKGZ1bmN0aW9uIChyZXMpIHsKICAgICAgICB2YXIgY29weSA9IHJlcy5jbG9uZSgpOwogICAgICAgIGNhY2hlcy5vcGVuKENBQ0hFKS50aGVuKGZ1bmN0aW9uIChjYWNoZSkgeyBjYWNoZS5wdXQocmVxLCBjb3B5KTsgfSk7CiAgICAgICAgcmV0dXJuIHJlczsKICAgICAgfSkuY2F0Y2goZnVuY3Rpb24gKCkgewogICAgICAgIHJldHVybiBjYWNoZXMubWF0Y2gocmVxKS50aGVuKGZ1bmN0aW9uIChoaXQpIHsgcmV0dXJuIGhpdCB8fCBjYWNoZXMubWF0Y2goIi4uL2luZGV4Lmh0bWwiKTsgfSk7CiAgICAgIH0pCiAgICApOwogICAgcmV0dXJuOwogIH0KICAvLyBTdGF0aWMgYXNzZXRzOiBjYWNoZSBmaXJzdCwgdGhlbiBuZXR3b3JrLgogIGV2ZW50LnJlc3BvbmRXaXRoKAogICAgY2FjaGVzLm1hdGNoKHJlcSkudGhlbihmdW5jdGlvbiAoaGl0KSB7CiAgICAgIGlmIChoaXQpIHJldHVybiBoaXQ7CiAgICAgIHJldHVybiBmZXRjaChyZXEpLnRoZW4oZnVuY3Rpb24gKHJlcykgewogICAgICAgIHZhciBjb3B5ID0gcmVzLmNsb25lKCk7CiAgICAgICAgY2FjaGVzLm9wZW4oQ0FDSEUpLnRoZW4oZnVuY3Rpb24gKGNhY2hlKSB7IGNhY2hlLnB1dChyZXEsIGNvcHkpOyB9KTsKICAgICAgICByZXR1cm4gcmVzOwogICAgICB9KTsKICAgIH0pCiAgKTsKfSk7Cg==").catch(function () { /* install still offered via manifest in supported browsers */ });
       });
     }
     var deferredInstallPrompt = null;
