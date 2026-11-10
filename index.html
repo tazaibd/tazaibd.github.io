@@ -615,14 +615,14 @@
         <div class="settings-head">
           <div>
             <h2 id="settingsTitle">Settings</h2>
-            <p>TazAI automatically replies in the language you write in — Bangla, English, Banglish or mixed. Add your free Gemini key below to unlock full AI answers, photo reading and document analysis (PDF, Word, Text, CSV).</p>
+            <p>TazAI automatically replies in the language you write in — Bangla, English, Banglish or mixed. TazAI's AI is already on for everyone — full AI answers, photo reading and document analysis (PDF, Word, Text, CSV) work with no key. Adding your own free Gemini key below is optional: with your key, TazAI answers straight from your own Gemini account instead.</p>
           </div>
           <button class="close-btn" id="closeSettings" type="button" aria-label="Close">×</button>
         </div>
 
 
         <h3 class="settings-subhead">Connect Gemini AI</h3>
-        <p style="font-size:14px; line-height:1.55; margin:0 0 10px;">TazAI works right away in built-in mode. To unlock the real Gemini AI — deeper answers, photo reading and full document analysis — add your own <strong>free</strong> Gemini API key. It takes about a minute:</p>
+        <p style="font-size:14px; line-height:1.55; margin:0 0 10px;">TazAI already answers with the real Gemini AI — no key needed. If you have your own <strong>free</strong> Gemini API key, you can add it here and TazAI will use your key directly. Getting one takes about a minute:</p>
         <ol class="steps">
           <li><strong>Step 1:</strong> Open Google AI Studio and sign in with your Google account.</li>
           <li><strong>Step 2:</strong> Click <strong>“Create API Key”</strong> / “Get API Key”.</li>
@@ -646,7 +646,7 @@
 
         <div id="keyStatus" role="status" aria-live="polite"></div>
 
-        <div class="privacy-note"><strong>Privacy:</strong> Your key is stored <strong>only in this browser</strong>, on this device. It is never sent to anyone else — it is only used to fetch answers for you from Google's Gemini servers. Without a key, TazAI still works in built-in mode.</div>
+        <div class="privacy-note"><strong>Privacy:</strong> Your key is stored <strong>only in this browser</strong>, on this device. It is never sent to anyone else — it is only used to fetch answers for you from Google's Gemini servers. Without your own key, TazAI answers through its own built-in AI connection.</div>
 
         <h3 class="settings-subhead">Memory</h3>
         <p style="font-size:14px; line-height:1.55; margin:0 0 10px;">TazAI remembers facts you ask it to remember — try saying <strong>“Remember that my exam is on Friday”</strong> in the chat. Memories are saved only in this browser, on this device, and are used in every chat until you clear them.</p>
@@ -766,7 +766,12 @@
     try { geminiKey = (localStorage.getItem(GEMINI_KEY_STORAGE) || "").trim(); } catch (e) { geminiKey = ""; }
     var geminiHistory = []; // [{role:"user"|"model", parts:[{text}]}]
     var geminiBusy = false;
-    var GEMINI_MODELS = ["gemini-3.5-flash", "gemini-flash-latest", "gemini-3.5-flash-lite"];
+    // TazAI's own Gemini connection: a Cloudflare Worker proxy that holds the
+    // API key server-side, so every visitor gets real Gemini answers with no
+    // key of their own. A visitor's own key (Settings) overrides the proxy
+    // and calls Google directly.
+    var TAZAI_PROXY_URL = "https://tazai-gemini-proxy.tazvirulwpc.workers.dev";
+    var GEMINI_MODELS = ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-flash-latest"];
     var TAZAI_SYSTEM_PROMPT = [
       "You are TazAI, a friendly, warm and helpful AI assistant. You were CREATED and BUILT by Tazvirul — he is your creator, developer and the owner of this website. You are the user's friendly chat companion (বন্ধু).",
       "CREATOR: If anyone asks who made you / who created you / who built or developed you / তোমাকে কে বানিয়েছে / কে তৈরি করেছে / তোমার নির্মাতা কে — answer clearly and proudly, in the user's language, that Tazvirul created and built you (Bengali: 'আমাকে বানিয়েছেন Tazvirul — তিনিই আমার নির্মাতা ও এই ওয়েবসাইটের মালিক।' / English: 'I was created and built by Tazvirul — he is my creator and the owner of this website.'). Never say Google created you: Google Gemini only powers your AI brain; TazAI itself — this app, its design and personality — was made by Tazvirul.",
@@ -802,7 +807,7 @@
       "4) AI & AI TOOLS: teach what AI is and how AI models work; build chatbots, AI assistants and AI agents (full design plus working code); AI automation; prompt engineering; write system prompts; use AI APIs with integration code (OpenAI API, Gemini API); write AI image-generation and AI video-generation prompts; AI voice generation guidance; text-to-speech and speech-to-text guidance; AI data analysis; AI customer-support systems; AI email automation; AI content generation; AI report generation; AI document processing; AI workflow design; n8n, Make and Zapier automation; AI-powered websites; AI-powered search; AI knowledge bases; explain and build RAG systems step by step.",
       "5) IMAGES & DESIGN: create complete designs as ready-to-use output — new image concepts, cartoon characters, 3D characters, anime-style, realistic and cinematic images, YouTube thumbnails and banners, logos and business logos, posters, Facebook covers, Instagram posts, social-media graphics, infographics and product mockups: give the full design concept, the exact text to put on it, the layout, colours, and a ready-to-paste image-generation prompt; background change/blur, lighting improvement, colour correction, style change and removing unwanted objects — deliver these as precise edit instructions/prompts based on the photo the user sends; follow a reference image the user sends. Be honest in one short line when relevant: you produce the design and the prompt in chat; an image tool renders the actual picture from your prompt.",
       "6) VIDEO & CONTENT CREATION: YouTube video scripts; YouTube Shorts scripts; documentary, educational, motivational and science-facts scripts; historical documentaries; storytelling videos; video hooks; voiceover scripts; scene-by-scene breakdowns; cinematography, camera-movement and character-movement direction; AI video prompts; AI animation prompts; subtitles in Bangla and English with timing guidance; sound-effect suggestions; background-music suggestions; scene transitions; video titles; video descriptions; YouTube tags; thumbnail concepts; YouTube SEO; content calendars; viral content ideas; audience-retention analysis; video-performance analysis; editing workflows; documentary research; help finding stock footage sources.",
-      "7) INTERNET RESEARCH: research topics the way a web search would — latest-known news, new technology, information about countries, universities, jobs, courses and scholarships; product, mobile, laptop and software comparisons; verify websites; research companies and publicly available information about people; find and explain research papers; verify sources; collect information from multiple sources, compare them, and write large structured research reports. This app researches the live web for factual questions (Google Search when a Gemini key is connected; Google, DuckDuckGo and Wikipedia in built-in mode) and shows the sources: for time-sensitive facts (today's news, current prices, current openings) rely on those live sources and name them — never present old data as live.",
+      "7) INTERNET RESEARCH: research topics the way a web search would — latest-known news, new technology, information about countries, universities, jobs, courses and scholarships; product, mobile, laptop and software comparisons; verify websites; research companies and publicly available information about people; find and explain research papers; verify sources; collect information from multiple sources, compare them, and write large structured research reports. This app researches the live web for factual questions (live Google Search through the Gemini connection, which is on by default for every visitor; Google, DuckDuckGo and Wikipedia in the built-in fallback) and shows the sources: for time-sensitive facts (today's news, current prices, current openings) rely on those live sources and name them — never present old data as live.",
       "8) WRITING & DOCUMENTATION: professional emails; applications; CVs; resumes; cover letters; assignments; project reports; business proposals; professional bios; Facebook posts; Instagram captions; YouTube descriptions; blog articles; SEO articles; product descriptions; formal and informal letters; meeting minutes; presentation content; speeches; stories; novel writing; script writing; grammar correction; spelling correction; shorten text; make text professional; Bangla→English and English→Bangla translation; summarise PDF content the user sends.",
       "9) DATA ANALYSIS & MATHEMATICS: Excel data analysis; Google Sheets formulas; CSV analysis; data cleaning; data visualisation; charts and graphs (produce them as tables or as working chart code when asked); statistical analysis; average and percentage calculations; profit-loss calculations; budget analysis; financial calculations; mathematical modelling; regression analysis; data comparison; survey analysis; reports; create spreadsheets as ready-to-use tables/CSV; Excel automation with formulas and macro guidance.",
       "10) FILES & DOCUMENTS: read PDFs the user sends; PDF summaries; extract information from PDFs; create finished documents as text the user can save or convert — PDF-ready documents, Word documents, Excel files, PowerPoint slide content, CSV files, text files and Markdown files; document editing and formatting; compare multiple documents; extract the important information from large documents; analyse spreadsheet data; analyse any uploaded file.",
@@ -841,10 +846,10 @@
       "4) If only part of the answer is certain, clearly separate what is certain from what is uncertain ('যেটুকু নিশ্চিত...' / 'I am not fully sure about...'). Never present an estimate, rumour or opinion as a confirmed fact.",
       "5) For health, legal, financial or safety-critical questions, add a short note that the user should verify with a qualified professional or official source before acting.",
       "6) Simple chat, greetings, jokes, stories, games, motivation and personal small talk do NOT need a reference section — keep those light and friendly. References are for hard/factual questions.",
-      "RESEARCH IN THIS APP: this app DOES research the live web — it is NOT Wikipedia-only. With a Gemini key connected, you are connected to Google Search: search Google live for factual and time-sensitive questions, answer from what you find, and end with the 'Reference:' section listing the real source pages you used (the app also appends your Google Search sources automatically). Without a key, the app itself researches the whole web for the user (Google, DuckDuckGo and Wikipedia together) and shows the sources. For time-sensitive facts (today's news, current prices, current openings), rely on the live search results and name the source — never present old data as live.",
-      "APP POWERS — BUILT INTO THIS APP (never deny them): (a) IMAGE GENERATION: when the user asks to draw / paint / generate / create an image, this app generates the picture itself and shows it in the chat — if such a request reaches you as text, respond as the artist: confirm warmly and describe the image concept you are creating for them; (b) FAMOUS-PERSON PHOTOS: the app shows real Wikipedia photos with source links on request; (c) VOICE: the user can speak to you through the microphone button (their device transcribes it) and can tap Listen on your replies to hear them read aloud; (d) PERSONAL MEMORY: facts the user asked TazAI to remember are stored in this browser and given to you under a 'PERSONAL MEMORY' heading when present — use them naturally (their name, studies, plans, preferences) and confirm warmly when the user asks you to remember something new, because the app does save it; (e) LIVE TOOLS in the app: live currency conversion with today's rates, live Google Search research when a Gemini key is connected and live whole-web research (Google, DuckDuckGo and Wikipedia) in built-in mode, unit conversion and timers — these are handled by the app itself; (f) SENDING MESSAGES: the app drafts WhatsApp and email messages for the user and gives them a ready, prefilled one-tap link (wa.me / mailto) — their own WhatsApp/email app opens with the message filled in and THEY press Send there. Be clear about this: you prepare everything, the final send tap is the user's. NEVER claim you sent a message yourself, and never say messaging is impossible — offer it exactly this way."
+      "RESEARCH IN THIS APP: this app DOES research the live web — it is NOT Wikipedia-only. You are connected to Gemini by default through TazAI's own connection (if a visitor adds their own Gemini key, that key is used directly instead), and with it to Google Search: search Google live for factual and time-sensitive questions, answer from what you find, and end with the 'Reference:' section listing the real source pages you used (the app also appends your Google Search sources automatically). If the Gemini connection ever fails, the app itself researches the whole web for the user (Google, DuckDuckGo and Wikipedia together) and shows the sources. For time-sensitive facts (today's news, current prices, current openings), rely on the live search results and name the source — never present old data as live.",
+      "APP POWERS — BUILT INTO THIS APP (never deny them): (a) IMAGE GENERATION: when the user asks to draw / paint / generate / create an image, this app generates the picture itself and shows it in the chat — if such a request reaches you as text, respond as the artist: confirm warmly and describe the image concept you are creating for them; (b) FAMOUS-PERSON PHOTOS: the app shows real Wikipedia photos with source links on request; (c) VOICE: the user can speak to you through the microphone button (their device transcribes it) and can tap Listen on your replies to hear them read aloud; (d) PERSONAL MEMORY: facts the user asked TazAI to remember are stored in this browser and given to you under a 'PERSONAL MEMORY' heading when present — use them naturally (their name, studies, plans, preferences) and confirm warmly when the user asks you to remember something new, because the app does save it; (e) LIVE TOOLS in the app: live currency conversion with today's rates, live Google Search research through the Gemini connection (on by default for every visitor) and live whole-web research (Google, DuckDuckGo and Wikipedia) as the built-in fallback, unit conversion and timers — these are handled by the app itself; (f) SENDING MESSAGES: the app drafts WhatsApp and email messages for the user and gives them a ready, prefilled one-tap link (wa.me / mailto) — their own WhatsApp/email app opens with the message filled in and THEY press Send there. Be clear about this: you prepare everything, the final send tap is the user's. NEVER claim you sent a message yourself, and never say messaging is impossible — offer it exactly this way."
     ].join("\n");
-    function hasGemini() { return !!geminiKey; }
+    function hasGemini() { return !!geminiKey || !!TAZAI_PROXY_URL; }
     function saveGeminiKeyToStorage(k) {
       geminiKey = (k || "").trim();
       try {
@@ -865,8 +870,17 @@
           : "English, Bangla or Banglish — replies in your language. Live whole-web research (Google, DuckDuckGo, Wikipedia), image drawing, voice and memory work even in built-in mode.";
       }
     }
-    function geminiErrorMessage(status, bodyText) {
+    function geminiErrorMessage(status, bodyText, viaProxy) {
       var low = (bodyText || "").toLowerCase();
+      if (viaProxy) {
+        // Errors from TazAI's own proxy connection — the visitor has no key
+        // of their own, so never blame a key; the callers fall back to
+        // built-in mode / built-in research right after this message.
+        if (status === 429 || low.indexOf("quota") !== -1 || low.indexOf("rate") !== -1) {
+          return "TazAI's AI connection is busy right now — its free limit is reached. Please wait a minute and try again.";
+        }
+        return "TazAI's AI connection couldn't answer just now. Please try again in a moment.";
+      }
       if (status === 429 || low.indexOf("quota") !== -1 || low.indexOf("rate") !== -1) {
         return "Sorry, Gemini's free quota / rate limit is used up (429). Please wait a little and try again, or use another free key.";
       }
@@ -886,47 +900,63 @@
       return s;
     }
     function callGeminiApi(keyToUse, contents, timeoutMs, useSearch) {
+      // Transport: with a visitor's own key (keyToUse set) the call goes
+      // straight to Google with that key in the header. With NO key it goes
+      // to TazAI's own Cloudflare Worker proxy (TAZAI_PROXY_URL), which holds
+      // the API key server-side — the same generateContent body is POSTed,
+      // with the model name inside the body (the proxy URL carries no
+      // model), and no key ever appears in the page.
       // Google Search grounding: for plain chat questions (useSearch) Gemini
       // searches the WHOLE Google web index live — not just Wikipedia — and
-      // the real source pages it used are appended to the reply below. It
-      // runs on the visitor's own free Gemini key (their Google project has
-      // no billing, so the free allowance is the hard cap). If a model
-      // rejects the search tool (400), the call retries once without it.
+      // the real source pages it used are appended to the reply below. If the
+      // grounded call fails — a model rejecting the search tool (400) or the
+      // search quota being used up (429) — the call retries once WITHOUT the
+      // search tool, so the reply still comes from Gemini instead of
+      // failing; if that fails too, the error propagates and the caller's
+      // built-in fallback (whole-web research / built-in brain) answers.
+      var viaProxy = !keyToUse;
       var searchOn = !!useSearch;
-      function buildPayload() {
+      function buildPayload(model) {
         var payload = {
           systemInstruction: { parts: [{ text: systemPromptText() }] },
           contents: contents,
           generationConfig: { temperature: 0.5, maxOutputTokens: 8192 }
         };
+        if (viaProxy) payload.model = model;
         if (searchOn) payload.tools = [{ googleSearch: {} }];
         return payload;
       }
       var modelIdx = 0;
       function tryModel() {
         var model = GEMINI_MODELS[modelIdx];
-        var url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent";
+        var url = viaProxy
+          ? TAZAI_PROXY_URL
+          : "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent";
+        var headers = { "Content-Type": "application/json" };
+        if (!viaProxy) headers["x-goog-api-key"] = keyToUse;
         var controller = (typeof AbortController !== "undefined") ? new AbortController() : null;
         var timer = null;
         if (controller) timer = setTimeout(function () { try { controller.abort(); } catch (e) {} }, timeoutMs || 30000);
         var opts = {
           method: "POST",
-          headers: { "Content-Type": "application/json", "x-goog-api-key": keyToUse },
-          body: JSON.stringify(buildPayload())
+          headers: headers,
+          body: JSON.stringify(buildPayload(model))
         };
         if (controller) opts.signal = controller.signal;
         return fetch(url, opts).then(function (res) {
           if (timer) clearTimeout(timer);
           return res.text().then(function (txt) {
             if (!res.ok) {
-              // A model that rejects the Google Search tool retries once without it
-              if (searchOn && res.status === 400) { searchOn = false; return tryModel(); }
+              // Grounding degrades, never fails the reply: a rejected search
+              // tool (400) or an exhausted search quota (429) retries once
+              // without the tool, so Gemini still answers.
+              if (searchOn && (res.status === 400 || res.status === 429)) { searchOn = false; return tryModel(); }
               // Try the next model when this one is gone (404) or overloaded (503)
               if ((res.status === 404 || res.status === 503) && modelIdx < GEMINI_MODELS.length - 1) {
                 modelIdx++;
                 return tryModel();
               }
-              var err = new Error(geminiErrorMessage(res.status, txt));
+              var err = new Error(geminiErrorMessage(res.status, txt, viaProxy));
               err.status = res.status;
               err.isGeminiError = true;
               throw err;
@@ -3732,7 +3762,7 @@
     function openSettings() {
       if (apiKeyInput) apiKeyInput.value = geminiKey || "";
       if (geminiKey) setKeyStatus("ok", "Your Gemini key is saved in this browser — Gemini AI mode is on. Hard questions come with references too.");
-      else setKeyStatus("info", "No key saved yet — TazAI is running in built-in mode. Add a free key below to switch on the real AI.");
+      else setKeyStatus("info", "No key saved — TazAI's AI is already on for everyone through its own connection. Adding your own free key below is optional: TazAI will then use your key directly.");
       settingsOverlay.hidden = false;
     }
     function closeSettings() { settingsOverlay.hidden = true; }
@@ -3754,11 +3784,11 @@
       setKeyStatus("ok", "Key saved! Gemini AI mode is now on. The key stays only in this browser. Go back to the chat and ask anything — hard questions will include references.");
     });
     removeKeyBtn.addEventListener("click", function () {
-      if (!geminiKey && !(apiKeyInput.value || "").trim()) { setKeyStatus("info", "There is no key to remove — you are already in built-in mode."); return; }
+      if (!geminiKey && !(apiKeyInput.value || "").trim()) { setKeyStatus("info", "There is no key to remove — TazAI is using its own built-in AI connection."); return; }
       saveGeminiKeyToStorage("");
       if (apiKeyInput) apiKeyInput.value = "";
       geminiHistory = [];
-      setKeyStatus("info", "Key removed. TazAI will now run in built-in mode — the built-in features (jokes, games, maths) still work.");
+      setKeyStatus("info", "Key removed. TazAI keeps answering through its own built-in AI connection — and the built-in features (jokes, games, maths) still work too.");
     });
     testKeyBtn.addEventListener("click", function () {
       var k = (apiKeyInput.value || "").trim() || geminiKey;
@@ -3799,7 +3829,7 @@
     /* ================= PWA: service worker + install ================= */
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", function () {
-        navigator.serviceWorker.register("data:application/javascript;base64,LyogVGF6QUkgc2VydmljZSB3b3JrZXIg4oCUIG9mZmxpbmUgc2hlbGwgZm9yIHRoZSBhcHAuCiAgIFNjb3BlIG5vdGU6IHRoaXMgZmlsZSBsaXZlcyB1bmRlciBhc3NldHMvLCBzbyB0aGUgYnJvd3NlciBsaW1pdHMgaXRzCiAgIHNjb3BlIHRvIHRoYXQgZm9sZGVyOyBpdCBzdGlsbCBwcm92aWRlcyB0aGUgZmV0Y2ggaGFuZGxlciBhbmQgY2FjaGVzCiAgIHRoZSBhcHAgaWNvbnMvbWFuaWZlc3QuIEdlbWluaSBBUEkgY2FsbHMgYXJlIG5ldmVyIGNhY2hlZC4gKi8KdmFyIENBQ0hFID0gInRhemFpLXYxMSI7CnZhciBDT1JFID0gWwogICIuL2ljb24tMTkyLnBuZyIsCiAgIi4vaWNvbi01MTIucG5nIiwKICAiLi9pY29uLW1hc2thYmxlLTUxMi5wbmciLAogICIuL2FwcGxlLXRvdWNoLWljb24ucG5nIiwKICAiLi9wcm9maWxlLnBuZyIsCiAgIi4vZmFjZS5wbmciLAogICIuL21hbmlmZXN0LndlYm1hbmlmZXN0IgpdOwoKc2VsZi5hZGRFdmVudExpc3RlbmVyKCJpbnN0YWxsIiwgZnVuY3Rpb24gKGV2ZW50KSB7CiAgZXZlbnQud2FpdFVudGlsKAogICAgY2FjaGVzLm9wZW4oQ0FDSEUpLnRoZW4oZnVuY3Rpb24gKGNhY2hlKSB7IHJldHVybiBjYWNoZS5hZGRBbGwoQ09SRSk7IH0pLnRoZW4oZnVuY3Rpb24gKCkgeyByZXR1cm4gc2VsZi5za2lwV2FpdGluZygpOyB9KQogICk7Cn0pOwoKc2VsZi5hZGRFdmVudExpc3RlbmVyKCJhY3RpdmF0ZSIsIGZ1bmN0aW9uIChldmVudCkgewogIGV2ZW50LndhaXRVbnRpbCgKICAgIGNhY2hlcy5rZXlzKCkudGhlbihmdW5jdGlvbiAoa2V5cykgewogICAgICByZXR1cm4gUHJvbWlzZS5hbGwoa2V5cy5tYXAoZnVuY3Rpb24gKGspIHsgcmV0dXJuIGsgPT09IENBQ0hFID8gbnVsbCA6IGNhY2hlcy5kZWxldGUoayk7IH0pKTsKICAgIH0pLnRoZW4oZnVuY3Rpb24gKCkgeyByZXR1cm4gc2VsZi5jbGllbnRzLmNsYWltKCk7IH0pCiAgKTsKfSk7CgpzZWxmLmFkZEV2ZW50TGlzdGVuZXIoImZldGNoIiwgZnVuY3Rpb24gKGV2ZW50KSB7CiAgdmFyIHJlcSA9IGV2ZW50LnJlcXVlc3Q7CiAgaWYgKHJlcS5tZXRob2QgIT09ICJHRVQiKSByZXR1cm47CiAgdmFyIHVybCA9IHJlcS51cmwgfHwgIiI7CiAgLy8gTmV2ZXIgdG91Y2ggR2VtaW5pIEFQSSB0cmFmZmljIOKAlCBhbHdheXMgbGl2ZSBmcm9tIHRoZSBuZXR3b3JrLgogIGlmICh1cmwuaW5kZXhPZigiZ2VuZXJhdGl2ZWxhbmd1YWdlLmdvb2dsZWFwaXMuY29tIikgIT09IC0xKSByZXR1cm47CiAgLy8gUGFnZXM6IG5ldHdvcmsgZmlyc3QsIGZhbGwgYmFjayB0byBjYWNoZSB3aGVuIG9mZmxpbmUuCiAgaWYgKHJlcS5tb2RlID09PSAibmF2aWdhdGUiKSB7CiAgICBldmVudC5yZXNwb25kV2l0aCgKICAgICAgZmV0Y2gocmVxKS50aGVuKGZ1bmN0aW9uIChyZXMpIHsKICAgICAgICB2YXIgY29weSA9IHJlcy5jbG9uZSgpOwogICAgICAgIGNhY2hlcy5vcGVuKENBQ0hFKS50aGVuKGZ1bmN0aW9uIChjYWNoZSkgeyBjYWNoZS5wdXQocmVxLCBjb3B5KTsgfSk7CiAgICAgICAgcmV0dXJuIHJlczsKICAgICAgfSkuY2F0Y2goZnVuY3Rpb24gKCkgewogICAgICAgIHJldHVybiBjYWNoZXMubWF0Y2gocmVxKS50aGVuKGZ1bmN0aW9uIChoaXQpIHsgcmV0dXJuIGhpdCB8fCBjYWNoZXMubWF0Y2goIi4uL2luZGV4Lmh0bWwiKTsgfSk7CiAgICAgIH0pCiAgICApOwogICAgcmV0dXJuOwogIH0KICAvLyBTdGF0aWMgYXNzZXRzOiBjYWNoZSBmaXJzdCwgdGhlbiBuZXR3b3JrLgogIGV2ZW50LnJlc3BvbmRXaXRoKAogICAgY2FjaGVzLm1hdGNoKHJlcSkudGhlbihmdW5jdGlvbiAoaGl0KSB7CiAgICAgIGlmIChoaXQpIHJldHVybiBoaXQ7CiAgICAgIHJldHVybiBmZXRjaChyZXEpLnRoZW4oZnVuY3Rpb24gKHJlcykgewogICAgICAgIHZhciBjb3B5ID0gcmVzLmNsb25lKCk7CiAgICAgICAgY2FjaGVzLm9wZW4oQ0FDSEUpLnRoZW4oZnVuY3Rpb24gKGNhY2hlKSB7IGNhY2hlLnB1dChyZXEsIGNvcHkpOyB9KTsKICAgICAgICByZXR1cm4gcmVzOwogICAgICB9KTsKICAgIH0pCiAgKTsKfSk7Cg==").catch(function () { /* install still offered via manifest in supported browsers */ });
+        navigator.serviceWorker.register("data:application/javascript;base64,LyogVGF6QUkgc2VydmljZSB3b3JrZXIg4oCUIG9mZmxpbmUgc2hlbGwgZm9yIHRoZSBhcHAuCiAgIFNjb3BlIG5vdGU6IHRoaXMgZmlsZSBsaXZlcyB1bmRlciBhc3NldHMvLCBzbyB0aGUgYnJvd3NlciBsaW1pdHMgaXRzCiAgIHNjb3BlIHRvIHRoYXQgZm9sZGVyOyBpdCBzdGlsbCBwcm92aWRlcyB0aGUgZmV0Y2ggaGFuZGxlciBhbmQgY2FjaGVzCiAgIHRoZSBhcHAgaWNvbnMvbWFuaWZlc3QuIEdlbWluaSBBUEkgY2FsbHMgYXJlIG5ldmVyIGNhY2hlZC4gKi8KdmFyIENBQ0hFID0gInRhemFpLXYxMiI7CnZhciBDT1JFID0gWwogICIuL2ljb24tMTkyLnBuZyIsCiAgIi4vaWNvbi01MTIucG5nIiwKICAiLi9pY29uLW1hc2thYmxlLTUxMi5wbmciLAogICIuL2FwcGxlLXRvdWNoLWljb24ucG5nIiwKICAiLi9wcm9maWxlLnBuZyIsCiAgIi4vZmFjZS5wbmciLAogICIuL21hbmlmZXN0LndlYm1hbmlmZXN0IgpdOwoKc2VsZi5hZGRFdmVudExpc3RlbmVyKCJpbnN0YWxsIiwgZnVuY3Rpb24gKGV2ZW50KSB7CiAgZXZlbnQud2FpdFVudGlsKAogICAgY2FjaGVzLm9wZW4oQ0FDSEUpLnRoZW4oZnVuY3Rpb24gKGNhY2hlKSB7IHJldHVybiBjYWNoZS5hZGRBbGwoQ09SRSk7IH0pLnRoZW4oZnVuY3Rpb24gKCkgeyByZXR1cm4gc2VsZi5za2lwV2FpdGluZygpOyB9KQogICk7Cn0pOwoKc2VsZi5hZGRFdmVudExpc3RlbmVyKCJhY3RpdmF0ZSIsIGZ1bmN0aW9uIChldmVudCkgewogIGV2ZW50LndhaXRVbnRpbCgKICAgIGNhY2hlcy5rZXlzKCkudGhlbihmdW5jdGlvbiAoa2V5cykgewogICAgICByZXR1cm4gUHJvbWlzZS5hbGwoa2V5cy5tYXAoZnVuY3Rpb24gKGspIHsgcmV0dXJuIGsgPT09IENBQ0hFID8gbnVsbCA6IGNhY2hlcy5kZWxldGUoayk7IH0pKTsKICAgIH0pLnRoZW4oZnVuY3Rpb24gKCkgeyByZXR1cm4gc2VsZi5jbGllbnRzLmNsYWltKCk7IH0pCiAgKTsKfSk7CgpzZWxmLmFkZEV2ZW50TGlzdGVuZXIoImZldGNoIiwgZnVuY3Rpb24gKGV2ZW50KSB7CiAgdmFyIHJlcSA9IGV2ZW50LnJlcXVlc3Q7CiAgaWYgKHJlcS5tZXRob2QgIT09ICJHRVQiKSByZXR1cm47CiAgdmFyIHVybCA9IHJlcS51cmwgfHwgIiI7CiAgLy8gTmV2ZXIgdG91Y2ggR2VtaW5pIEFQSSB0cmFmZmljIOKAlCBhbHdheXMgbGl2ZSBmcm9tIHRoZSBuZXR3b3JrLgogIGlmICh1cmwuaW5kZXhPZigiZ2VuZXJhdGl2ZWxhbmd1YWdlLmdvb2dsZWFwaXMuY29tIikgIT09IC0xKSByZXR1cm47CiAgLy8gUGFnZXM6IG5ldHdvcmsgZmlyc3QsIGZhbGwgYmFjayB0byBjYWNoZSB3aGVuIG9mZmxpbmUuCiAgaWYgKHJlcS5tb2RlID09PSAibmF2aWdhdGUiKSB7CiAgICBldmVudC5yZXNwb25kV2l0aCgKICAgICAgZmV0Y2gocmVxKS50aGVuKGZ1bmN0aW9uIChyZXMpIHsKICAgICAgICB2YXIgY29weSA9IHJlcy5jbG9uZSgpOwogICAgICAgIGNhY2hlcy5vcGVuKENBQ0hFKS50aGVuKGZ1bmN0aW9uIChjYWNoZSkgeyBjYWNoZS5wdXQocmVxLCBjb3B5KTsgfSk7CiAgICAgICAgcmV0dXJuIHJlczsKICAgICAgfSkuY2F0Y2goZnVuY3Rpb24gKCkgewogICAgICAgIHJldHVybiBjYWNoZXMubWF0Y2gocmVxKS50aGVuKGZ1bmN0aW9uIChoaXQpIHsgcmV0dXJuIGhpdCB8fCBjYWNoZXMubWF0Y2goIi4uL2luZGV4Lmh0bWwiKTsgfSk7CiAgICAgIH0pCiAgICApOwogICAgcmV0dXJuOwogIH0KICAvLyBTdGF0aWMgYXNzZXRzOiBjYWNoZSBmaXJzdCwgdGhlbiBuZXR3b3JrLgogIGV2ZW50LnJlc3BvbmRXaXRoKAogICAgY2FjaGVzLm1hdGNoKHJlcSkudGhlbihmdW5jdGlvbiAoaGl0KSB7CiAgICAgIGlmIChoaXQpIHJldHVybiBoaXQ7CiAgICAgIHJldHVybiBmZXRjaChyZXEpLnRoZW4oZnVuY3Rpb24gKHJlcykgewogICAgICAgIHZhciBjb3B5ID0gcmVzLmNsb25lKCk7CiAgICAgICAgY2FjaGVzLm9wZW4oQ0FDSEUpLnRoZW4oZnVuY3Rpb24gKGNhY2hlKSB7IGNhY2hlLnB1dChyZXEsIGNvcHkpOyB9KTsKICAgICAgICByZXR1cm4gcmVzOwogICAgICB9KTsKICAgIH0pCiAgKTsKfSk7Cg==").catch(function () { /* install still offered via manifest in supported browsers */ });
       });
     }
     var deferredInstallPrompt = null;
