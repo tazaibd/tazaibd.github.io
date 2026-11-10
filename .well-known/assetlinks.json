@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "bd.tazaibd.tazai",
+      "sha256_cert_fingerprints": [
+        "59:FA:87:62:D7:A2:21:0E:F8:27:B1:C7:7D:ED:85:B2:5C:7E:CE:99:DE:FA:E9:7E:1C:EA:BB:59:92:78:16:AB"
+      ]
+    }
+  }
+]
