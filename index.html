@@ -2859,13 +2859,39 @@
           "Oboshshoi — likhe dicchi. Shudhu bolo:\n\n• **Ki likhte hobe** — email, chithi, abedon, rochona, onuchched ba report\n• **Bishoy** ar mul point-gulo\n• **Dhoron o doirgho** — formal naki sadamata, choto naki bistarito\n\nSettings-e Gemini Key bosano thakle ami puro lekha-ta toiri kore debo; na thakle ami kathamo ar mul point sajiye debo jate tumi sohoje shesh korte paro.") };
       }
 
-      /* --- hard / factual question in built-in mode: be honest, give a reference path, never guess --- */
-      var looksHard = /(কেন|কীভাবে|কিভাবে|ব্যাখ্যা|বলতে পারো.*কী|কাকে বলে|কাকে বলা হয়|সংজ্ঞা|কারণ কী|কি কারণে|কবে (হয়েছিল|জন্ম|মারা|প্রতিষ্ঠিত)|কে (আবিষ্কার|তৈরি|লিখেছিলেন|প্রতিষ্ঠা)|কোথায় অবস্থিত|কত (সালে|সালে.*)|ইতিহাস|বৈজ্ঞানিক|সূত্র|নিয়ম|তত্ত্ব|রোগ|চিকিৎসা|ওষুধ|আইন|why|how does|how do|explain|what is|what are|who (invented|discovered|wrote|founded)|when did|where is|definition|science|history|formula|disease|medicine|law|keno|kivabe|kemne|byakkha|kake bole|kake bola hoy|songya|karon ki|ki karone|ke abishkar|kothay obosthito|itihas|bigganik|shutro|niyom|totto|rog|chikitsa|oshudh|ain)/i.test(low);
+      /* --- hard / factual question in built-in mode: NEVER deflect with a
+         generic clarification — route it to live Wikipedia research (see
+         researchThenAnswer below). Detection is deliberately broad: ANY
+         who / what / when / where / which question, any question about a
+         factual role, place or thing (president, capital, population…),
+         and the Bengali / Banglish equivalents (কে, কী, কখন, কোথায়,
+         ke, ki, kokhon, kothay…) counts as factual. Small talk, identity
+         and personal questions ("how are you", "who are you", "what is
+         my name") are all handled by earlier branches, so they never
+         reach this point. --- */
+      var looksHardKw = /(কেন|কীভাবে|কিভাবে|ব্যাখ্যা|বলতে পারো.*কী|কাকে বলে|কাকে বলা হয়|সংজ্ঞা|কারণ কী|কি কারণে|কবে (হয়েছিল|জন্ম|মারা|প্রতিষ্ঠিত)|কে (আবিষ্কার|তৈরি|লিখেছিলেন|প্রতিষ্ঠা)|কোথায় অবস্থিত|কত (সালে|সালে.*)|ইতিহাস|বৈজ্ঞানিক|সূত্র|নিয়ম|তত্ত্ব|রোগ|চিকিৎসা|ওষুধ|আইন|why|how does|how do|explain|what is|what are|who (invented|discovered|wrote|founded)|when did|where is|definition|science|history|formula|disease|medicine|law|keno|kivabe|kemne|byakkha|kake bole|kake bola hoy|songya|karon ki|ki karone|ke abishkar|kothay obosthito|itihas|bigganik|shutro|niyom|totto|rog|chikitsa|oshudh|ain)/i.test(low);
+      var qTrim = low.replace(/^[?\s]+/, "");
+      var enQFactual = false;
+      if (/^(who|what|when|where|which|why|how)\b/.test(qTrim)) {
+        if (/^(who|what|when|where|which)\s+(is|are|was|were|did|does|do|invented|discovered|founded|wrote|born|died|happened|means?|called)\b/.test(qTrim)) enQFactual = true;
+        if (/^(who|what|when|where|which)\b[^?.!]{2,70}\?\s*$/.test(qTrim)) enQFactual = true;
+        if (/^how\s+(does|do|is|are|was|were|many|much|old|big|far|long|tall|fast|hot|cold)\b/.test(qTrim)) enQFactual = true;
+        if (/^(how|why)\b[^?.!]{2,70}\?\s*$/.test(qTrim) && !/^how\s+(are|do you|can i|to)\b/.test(qTrim)) enQFactual = true;
+        if (/\b(you|your)\b/.test(qTrim.slice(0, 30))) enQFactual = false; // questions about the bot / the user are not research topics
+        if (/^(what|who)\s+(should|would|can you|do you)\b/.test(qTrim)) enQFactual = false;
+        if (/^(what|who)\s+(is|are)\s+(my|your)\b/.test(qTrim)) enQFactual = false; // "what is my / your name" is personal, handled earlier
+      }
+      var factualNoun = /(president|prime minister|chancellor|king|queen|emperor|sultan|pope|leader of|ruler|head of state|chief minister|governor|mayor|capital|population|currency|official language|national anthem|founder|inventor|discovered|রাষ্ট্রপতি|প্রধানমন্ত্রী|রাজধানী|জনসংখ্যা|মুদ্রা|রাজা|রানি|সুলতান|নেতা|rashtropoti|prodhan montri|rajdhani|jonosongkhya)/i.test(low);
+      var bnQFactual = /^[\s]*(কে|কী|কি|কখন|কবে|কোথায়|কোন|কত|কেন|কীভাবে|কিভাবে)(\s|$|\?)/.test(t)
+        || (/[\u0980-\u09FF]/.test(t) && /(কে|কাকে|কখন|কবে|কোথায়|কী|কেন|কত সালে)/.test(t) && /\?/.test(t));
+      var blQFactual = /^(ke|ki|kokhon|kobe|kothay|kon|koto|keno|kivabe)\b/.test(qTrim)
+        || (/\b(ke|ki)\s*\?\s*$/.test(qTrim) && qTrim.length >= 8);
+      var looksHard = looksHardKw || enQFactual || factualNoun || bnQFactual || blQFactual;
       if (looksHard) {
         return { hard: true, text: L(lang,
-          "সৎভাবে বলি — **এই প্রশ্নটার সঠিক উত্তর আমি নিশ্চিতভাবে জানি না**, তাই অনুমান করে ভুল উত্তর দেব না।\n\n **নির্ভরযোগ্য সূত্র:** পাঠ্যবিষয় হলে **NCTB পাঠ্যবই**; সাধারণ জ্ঞান/বিজ্ঞানে **Encyclopaedia Britannica** বা **Wikipedia**; স্বাস্থ্য/আইনে সংশ্লিষ্ট **অফিসিয়াল ওয়েবসাইট বা বিশেষজ্ঞ**।\n\nSettings থেকে ফ্রি Gemini Key বসালে আমি নিজেই এ ধরনের প্রশ্নের গভীর উত্তর দিতে পারব।",
-          "Honestly — **I don't know the correct answer to this for sure**, so I won't guess.\n\n **Where to verify:** study topics — your **NCTB textbook**; general knowledge/science — **Encyclopaedia Britannica** or **Wikipedia**; health/legal — the relevant **official website or a qualified expert**.\n\nConnect a free Gemini key in Settings and I can answer questions like this in depth myself.",
-          "Shotti bolchi — **ei proshno-tar sothik uttor ami nishchit-vabe jani na**, tai onuman kore vul uttor debo na.\n\n **Nirvorjoggo source:** porar bishoy hole **NCTB patho-boi**; shadharon gyan/biggane **Encyclopaedia Britannica** ba **Wikipedia**; shastho/ain-e **official website ba bisheshoggo**.\n\nSettings theke free Gemini Key boshale ami nijei e dhoroner proshner govir uttor dite parbo.") };
+          "সৎভাবে বলি — **Wikipedia-তে খুঁজেও এই প্রশ্নটার নির্ভরযোগ্য উত্তর পেলাম না**, তাই অনুমান করে ভুল উত্তর দেব না।\n\n **নির্ভরযোগ্য সূত্র:** পাঠ্যবিষয় হলে **NCTB পাঠ্যবই**; সাধারণ জ্ঞান/বিজ্ঞানে **Encyclopaedia Britannica** বা **Wikipedia**; স্বাস্থ্য/আইনে সংশ্লিষ্ট **অফিসিয়াল ওয়েবসাইট বা বিশেষজ্ঞ**।\n\nপ্রশ্নটা আরেকটু নির্দিষ্ট করে আবার লিখলেও আমি আবার খুঁজে দেখব। Settings থেকে ফ্রি Gemini Key বসালে আমি নিজেই এ ধরনের প্রশ্নের গভীর উত্তর দিতে পারব।",
+          "Honestly — **I searched Wikipedia and couldn't find a reliable answer to this**, so I won't guess and risk a wrong answer.\n\n **Where to verify:** study topics — your **NCTB textbook**; general knowledge/science — **Encyclopaedia Britannica** or **Wikipedia**; health/legal — the relevant **official website or a qualified expert**.\n\nAsk it again a little more specifically and I'll search once more. Or connect a free Gemini key in Settings and I can answer questions like this in depth myself.",
+          "Shotti bolchi — **Wikipedia-te khujeo ei proshno-tar nirvorjoggo uttor pelam na**, tai onuman kore vul uttor debo na.\n\n **Nirvorjoggo source:** porar bishoy hole **NCTB patho-boi**; shadharon gyan/biggane **Encyclopaedia Britannica** ba **Wikipedia**; shastho/ain-e **official website ba bisheshoggo**.\n\nProshno-ta arektu nirdishto kore abar likhleo ami abar khuje dekhbo. Settings theke free Gemini Key boshale ami nijei e dhoroner proshner govir uttor dite parbo.") };
       }
 
       /* --- fuzzy intent pass: mixed language, spelling mistakes (funney,
@@ -3027,17 +3053,50 @@
        never a guess. When nothing reliable is found, the honest "I don't
        know" fallback is shown instead. */
     function extractTopic(text) {
-      var q = " " + (text || "").replace(/[?.!।,;:"""]/g, " ") + " ";
-      q = q.replace(/\s(what is|what are|who is|who was|who invented|tell me about|explain|define|describe|please|the)\s/gi, " ");
-      q = q.replace(/\s(কী|কি|কাকে বলে|কাকে বলা হয়|সম্পর্কে বলো|সম্পর্কে বল|মানে কী|ব্যাখ্যা করো|বলো তো|কেন|কীভাবে|কিভাবে)\s/g, " ");
+      var raw = (text || "").replace(/[?.!।,;:"""'’‘]/g, " ");
+      var q = " " + raw + " ";
+      // English question scaffolding — strip it wherever it appears, so
+      // "Who is the president of France?" becomes the search topic
+      // "president of France", "What is the capital of Japan?" becomes
+      // "capital of Japan", "When did World War II end?" becomes
+      // "World War II end" (Wikipedia search resolves the article).
+      q = q.replace(/\s(can you tell me|do you know|tell me about|tell me|please tell me|please|explain to me|explain|define|describe)\s/gi, " ");
+      q = q.replace(/\s(who|what|when|where|which|how) s\s/gi, " "); // contractions: "Who's the…" (apostrophe already stripped) is a question word, not a topic
+      q = q.replace(/^(\s*)(who|what|when|where|which|why|how)\s+(is|are|was|were|did|does|do|invented|discovered|founded|wrote|born|died|happened)\s+/i, " ");
+      q = q.replace(/\s(who|what|when|where|which)\s+(is|are|was|were)\s/gi, " ");
+      q = q.replace(/\s(the|a|an)\s/gi, " ");
+      // Bengali question scaffolding
+      q = q.replace(/\s(কী|কি|কাকে বলে|কাকে বলা হয়|সম্পর্কে বলো|সম্পর্কে বল|মানে কী|ব্যাখ্যা করো|বলো তো|কেন|কীভাবে|কিভাবে|কে|কাকে|কখন|কবে|কোথায়)\s/g, " ");
+      // Banglish question scaffolding at the edges ("France er president ke")
+      q = q.replace(/^(\s*)(ke|ki|kokhon|kobe|kothay|kon|koto|keno|kivabe)\s+/i, " ");
+      q = q.replace(/\s(ke|ki)\s*$/i, " ");
       q = q.replace(/\s+/g, " ").trim();
+      if (q.length < 2) q = raw.replace(/\s+/g, " ").trim(); // never search an empty topic
       return q.slice(0, 90);
     }
-    function researchWiki(topic) {
+    // The article's full intro text (action API, exintro). The REST summary
+    // extract is sometimes only the opening definition — for "President of
+    // France" it never names the officeholder, while the intro does
+    // ("The current officeholder is Emmanuel Macron…"). Research answers
+    // prefer whichever of the two texts says more.
+    function wikiIntro(lang, title) {
+      return wikiJson("https://" + lang + ".wikipedia.org/w/api.php?action=query&prop=extracts&explaintext=1&exintro=1&redirects=1&titles=" + encodeURIComponent(String(title).replace(/_/g, " ")) + "&format=json&origin=*", 15000)
+        .then(function (d) {
+          var pages = (d && d.query && d.query.pages) || {};
+          var keys = Object.keys(pages);
+          for (var i = 0; i < keys.length; i++) {
+            var ex = pages[keys[i]] && pages[keys[i]].extract;
+            if (ex) return String(ex);
+          }
+          return "";
+        }).catch(function () { return ""; });
+    }
+    function researchWiki(topic, originalText) {
       if (!topic) return Promise.resolve(null);
       function summaryOrNull(lang, title) {
         return wikiSummary(lang, title).then(function (s) {
-          return (s && s.extract && s.type !== "disambiguation") ? s : null;
+          if (s && s.extract && s.type !== "disambiguation") { s._lang = lang; return s; }
+          return null;
         }).catch(function () { return null; });
       }
       function searchThenSummary(lang, q) {
@@ -3052,16 +3111,22 @@
           return chain;
         }).catch(function () { return null; });
       }
-      return summaryOrNull("en", topic)
+      var chain = summaryOrNull("en", topic)
         .then(function (s) { return s || searchThenSummary("en", topic); })
         .then(function (s) { return s || summaryOrNull("bn", topic); })
-        .then(function (s) { return s || searchThenSummary("bn", topic); })
-        .catch(function () { return null; });
+        .then(function (s) { return s || searchThenSummary("bn", topic); });
+      // Last resort: search Wikipedia with the visitor's full original
+      // question — its search engine often resolves phrasings the cleaned
+      // topic missed.
+      if (originalText && originalText.trim() && originalText.trim().toLowerCase() !== topic.toLowerCase()) {
+        chain = chain.then(function (s) { return s || searchThenSummary("en", originalText.trim()); });
+      }
+      return chain.catch(function () { return null; });
     }
     function formatResearch(sum, lang) {
       var pageUrl = (sum.content_urls && sum.content_urls.desktop && sum.content_urls.desktop.page) || ("https://en.wikipedia.org/wiki/" + encodeURIComponent(String(sum.title || "").replace(/\s+/g, "_")));
       var extract = String(sum.extract || "").replace(/\s+/g, " ").trim();
-      if (extract.length > 1100) extract = extract.slice(0, 1100).replace(/\s+\S*$/, "") + "…";
+      if (extract.length > 2400) extract = extract.slice(0, 2400).replace(/\s+\S*$/, "") + "…";
       return L(lang,
         "লাইভ গবেষণা করে উত্তরটা পেলাম \n\n**" + (sum.title || "") + "**\n\n" + extract + "\n\nরেফারেন্স / Source: Wikipedia — " + pageUrl + "\n\nআরও জানতে চাইলে এই বিষয়ের অন্য প্রশ্ন করো, অথবা Settings-এ ফ্রি Gemini Key বসালে আরও গভীর AI উত্তর পাবে।",
         "I researched this live \n\n**" + (sum.title || "") + "**\n\n" + extract + "\n\nReference / Source: Wikipedia — " + pageUrl + "\n\nAsk a follow-up about this topic any time — or connect the free Gemini key in Settings for deeper AI answers.",
@@ -3070,17 +3135,34 @@
     function researchThenAnswer(text, fallbackRes) {
       var lang = resolveLang(text);
       showTyping(workSteps("text"));
-      researchWiki(extractTopic(text)).then(function (sum) {
+      var topic = extractTopic(text);
+      // Only shown when Wikipedia genuinely has nothing reliable: the
+      // honest fallback PLUS a direct Wikipedia search link for the exact
+      // topic, so the visitor can verify in one tap — never a vague
+      // "tell me more" deflection.
+      var notFoundText = fallbackRes.text + "\n\n" + L(lang,
+        "তুমি নিজে সরাসরি খুঁজে দেখতে পারো — Wikipedia-তে এই বিষয়টা: https://en.wikipedia.org/w/index.php?search=" + encodeURIComponent(topic),
+        "You can also check directly — this topic on Wikipedia: https://en.wikipedia.org/w/index.php?search=" + encodeURIComponent(topic),
+        "Tumi nije shorashori khuje dekhte paro — Wikipedia-te ei bishoy-ta: https://en.wikipedia.org/w/index.php?search=" + encodeURIComponent(topic));
+      researchWiki(topic, text).then(function (sum) {
+        if (!sum) return null;
+        // Enrich with the full intro when it says more than the short REST
+        // extract — that is where "who" answers name the actual person.
+        return wikiIntro(sum._lang || "en", sum.title).then(function (intro) {
+          if (intro && intro.replace(/\s+/g, " ").trim().length > String(sum.extract || "").replace(/\s+/g, " ").trim().length) sum.extract = intro;
+          return sum;
+        }).catch(function () { return sum; });
+      }).then(function (sum) {
         hideTyping();
         sendBtn.disabled = false;
         if (sum) addMsg(formatResearch(sum, lang), "bot");
-        else addMsg(fallbackRes.text, "bot", fallbackRes.buttons);
+        else addMsg(notFoundText, "bot", fallbackRes.buttons);
         try { input.focus(); } catch (e) {}
         drainQueue();
       }).catch(function () {
         hideTyping();
         sendBtn.disabled = false;
-        addMsg(fallbackRes.text, "bot", fallbackRes.buttons);
+        addMsg(notFoundText, "bot", fallbackRes.buttons);
         try { input.focus(); } catch (e) {}
         drainQueue();
       });
@@ -3240,6 +3322,9 @@
         sendBtn.disabled = false;
         var reason = (err && err.message) ? err.message : "Gemini-তে সমস্যা হয়েছে।";
         var res = brain(clean);
+        // A factual question must never dead-end just because Gemini
+        // failed — research it live from Wikipedia instead, with source.
+        if (res.hard) { researchThenAnswer(clean, res); return; }
         addMsg(reason + "\n\n— আপাতত বিল্ট-ইন মোডে উত্তর দিচ্ছি:\n\n" + res.text, "bot", res.buttons);
         input.focus();
         drainQueue();
@@ -3618,7 +3703,7 @@
     /* ================= PWA: service worker + install ================= */
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", function () {
-        navigator.serviceWorker.register("data:application/javascript;base64,LyogVGF6QUkgc2VydmljZSB3b3JrZXIg4oCUIG9mZmxpbmUgc2hlbGwgZm9yIHRoZSBhcHAuCiAgIFNjb3BlIG5vdGU6IHRoaXMgZmlsZSBsaXZlcyB1bmRlciBhc3NldHMvLCBzbyB0aGUgYnJvd3NlciBsaW1pdHMgaXRzCiAgIHNjb3BlIHRvIHRoYXQgZm9sZGVyOyBpdCBzdGlsbCBwcm92aWRlcyB0aGUgZmV0Y2ggaGFuZGxlciBhbmQgY2FjaGVzCiAgIHRoZSBhcHAgaWNvbnMvbWFuaWZlc3QuIEdlbWluaSBBUEkgY2FsbHMgYXJlIG5ldmVyIGNhY2hlZC4gKi8KdmFyIENBQ0hFID0gInRhemFpLXY5IjsKdmFyIENPUkUgPSBbCiAgIi4vaWNvbi0xOTIucG5nIiwKICAiLi9pY29uLTUxMi5wbmciLAogICIuL2ljb24tbWFza2FibGUtNTEyLnBuZyIsCiAgIi4vYXBwbGUtdG91Y2gtaWNvbi5wbmciLAogICIuL3Byb2ZpbGUucG5nIiwKICAiLi9mYWNlLnBuZyIsCiAgIi4vbWFuaWZlc3Qud2VibWFuaWZlc3QiCl07CgpzZWxmLmFkZEV2ZW50TGlzdGVuZXIoImluc3RhbGwiLCBmdW5jdGlvbiAoZXZlbnQpIHsKICBldmVudC53YWl0VW50aWwoCiAgICBjYWNoZXMub3BlbihDQUNIRSkudGhlbihmdW5jdGlvbiAoY2FjaGUpIHsgcmV0dXJuIGNhY2hlLmFkZEFsbChDT1JFKTsgfSkudGhlbihmdW5jdGlvbiAoKSB7IHJldHVybiBzZWxmLnNraXBXYWl0aW5nKCk7IH0pCiAgKTsKfSk7CgpzZWxmLmFkZEV2ZW50TGlzdGVuZXIoImFjdGl2YXRlIiwgZnVuY3Rpb24gKGV2ZW50KSB7CiAgZXZlbnQud2FpdFVudGlsKAogICAgY2FjaGVzLmtleXMoKS50aGVuKGZ1bmN0aW9uIChrZXlzKSB7CiAgICAgIHJldHVybiBQcm9taXNlLmFsbChrZXlzLm1hcChmdW5jdGlvbiAoaykgeyByZXR1cm4gayA9PT0gQ0FDSEUgPyBudWxsIDogY2FjaGVzLmRlbGV0ZShrKTsgfSkpOwogICAgfSkudGhlbihmdW5jdGlvbiAoKSB7IHJldHVybiBzZWxmLmNsaWVudHMuY2xhaW0oKTsgfSkKICApOwp9KTsKCnNlbGYuYWRkRXZlbnRMaXN0ZW5lcigiZmV0Y2giLCBmdW5jdGlvbiAoZXZlbnQpIHsKICB2YXIgcmVxID0gZXZlbnQucmVxdWVzdDsKICBpZiAocmVxLm1ldGhvZCAhPT0gIkdFVCIpIHJldHVybjsKICB2YXIgdXJsID0gcmVxLnVybCB8fCAiIjsKICAvLyBOZXZlciB0b3VjaCBHZW1pbmkgQVBJIHRyYWZmaWMg4oCUIGFsd2F5cyBsaXZlIGZyb20gdGhlIG5ldHdvcmsuCiAgaWYgKHVybC5pbmRleE9mKCJnZW5lcmF0aXZlbGFuZ3VhZ2UuZ29vZ2xlYXBpcy5jb20iKSAhPT0gLTEpIHJldHVybjsKICAvLyBQYWdlczogbmV0d29yayBmaXJzdCwgZmFsbCBiYWNrIHRvIGNhY2hlIHdoZW4gb2ZmbGluZS4KICBpZiAocmVxLm1vZGUgPT09ICJuYXZpZ2F0ZSIpIHsKICAgIGV2ZW50LnJlc3BvbmRXaXRoKAogICAgICBmZXRjaChyZXEpLnRoZW4oZnVuY3Rpb24gKHJlcykgewogICAgICAgIHZhciBjb3B5ID0gcmVzLmNsb25lKCk7CiAgICAgICAgY2FjaGVzLm9wZW4oQ0FDSEUpLnRoZW4oZnVuY3Rpb24gKGNhY2hlKSB7IGNhY2hlLnB1dChyZXEsIGNvcHkpOyB9KTsKICAgICAgICByZXR1cm4gcmVzOwogICAgICB9KS5jYXRjaChmdW5jdGlvbiAoKSB7CiAgICAgICAgcmV0dXJuIGNhY2hlcy5tYXRjaChyZXEpLnRoZW4oZnVuY3Rpb24gKGhpdCkgeyByZXR1cm4gaGl0IHx8IGNhY2hlcy5tYXRjaCgiLi4vaW5kZXguaHRtbCIpOyB9KTsKICAgICAgfSkKICAgICk7CiAgICByZXR1cm47CiAgfQogIC8vIFN0YXRpYyBhc3NldHM6IGNhY2hlIGZpcnN0LCB0aGVuIG5ldHdvcmsuCiAgZXZlbnQucmVzcG9uZFdpdGgoCiAgICBjYWNoZXMubWF0Y2gocmVxKS50aGVuKGZ1bmN0aW9uIChoaXQpIHsKICAgICAgaWYgKGhpdCkgcmV0dXJuIGhpdDsKICAgICAgcmV0dXJuIGZldGNoKHJlcSkudGhlbihmdW5jdGlvbiAocmVzKSB7CiAgICAgICAgdmFyIGNvcHkgPSByZXMuY2xvbmUoKTsKICAgICAgICBjYWNoZXMub3BlbihDQUNIRSkudGhlbihmdW5jdGlvbiAoY2FjaGUpIHsgY2FjaGUucHV0KHJlcSwgY29weSk7IH0pOwogICAgICAgIHJldHVybiByZXM7CiAgICAgIH0pOwogICAgfSkKICApOwp9KTsK").catch(function () { /* install still offered via manifest in supported browsers */ });
+        navigator.serviceWorker.register("data:application/javascript;base64,LyogVGF6QUkgc2VydmljZSB3b3JrZXIg4oCUIG9mZmxpbmUgc2hlbGwgZm9yIHRoZSBhcHAuCiAgIFNjb3BlIG5vdGU6IHRoaXMgZmlsZSBsaXZlcyB1bmRlciBhc3NldHMvLCBzbyB0aGUgYnJvd3NlciBsaW1pdHMgaXRzCiAgIHNjb3BlIHRvIHRoYXQgZm9sZGVyOyBpdCBzdGlsbCBwcm92aWRlcyB0aGUgZmV0Y2ggaGFuZGxlciBhbmQgY2FjaGVzCiAgIHRoZSBhcHAgaWNvbnMvbWFuaWZlc3QuIEdlbWluaSBBUEkgY2FsbHMgYXJlIG5ldmVyIGNhY2hlZC4gKi8KdmFyIENBQ0hFID0gInRhemFpLXYxMCI7CnZhciBDT1JFID0gWwogICIuL2ljb24tMTkyLnBuZyIsCiAgIi4vaWNvbi01MTIucG5nIiwKICAiLi9pY29uLW1hc2thYmxlLTUxMi5wbmciLAogICIuL2FwcGxlLXRvdWNoLWljb24ucG5nIiwKICAiLi9wcm9maWxlLnBuZyIsCiAgIi4vZmFjZS5wbmciLAogICIuL21hbmlmZXN0LndlYm1hbmlmZXN0IgpdOwoKc2VsZi5hZGRFdmVudExpc3RlbmVyKCJpbnN0YWxsIiwgZnVuY3Rpb24gKGV2ZW50KSB7CiAgZXZlbnQud2FpdFVudGlsKAogICAgY2FjaGVzLm9wZW4oQ0FDSEUpLnRoZW4oZnVuY3Rpb24gKGNhY2hlKSB7IHJldHVybiBjYWNoZS5hZGRBbGwoQ09SRSk7IH0pLnRoZW4oZnVuY3Rpb24gKCkgeyByZXR1cm4gc2VsZi5za2lwV2FpdGluZygpOyB9KQogICk7Cn0pOwoKc2VsZi5hZGRFdmVudExpc3RlbmVyKCJhY3RpdmF0ZSIsIGZ1bmN0aW9uIChldmVudCkgewogIGV2ZW50LndhaXRVbnRpbCgKICAgIGNhY2hlcy5rZXlzKCkudGhlbihmdW5jdGlvbiAoa2V5cykgewogICAgICByZXR1cm4gUHJvbWlzZS5hbGwoa2V5cy5tYXAoZnVuY3Rpb24gKGspIHsgcmV0dXJuIGsgPT09IENBQ0hFID8gbnVsbCA6IGNhY2hlcy5kZWxldGUoayk7IH0pKTsKICAgIH0pLnRoZW4oZnVuY3Rpb24gKCkgeyByZXR1cm4gc2VsZi5jbGllbnRzLmNsYWltKCk7IH0pCiAgKTsKfSk7CgpzZWxmLmFkZEV2ZW50TGlzdGVuZXIoImZldGNoIiwgZnVuY3Rpb24gKGV2ZW50KSB7CiAgdmFyIHJlcSA9IGV2ZW50LnJlcXVlc3Q7CiAgaWYgKHJlcS5tZXRob2QgIT09ICJHRVQiKSByZXR1cm47CiAgdmFyIHVybCA9IHJlcS51cmwgfHwgIiI7CiAgLy8gTmV2ZXIgdG91Y2ggR2VtaW5pIEFQSSB0cmFmZmljIOKAlCBhbHdheXMgbGl2ZSBmcm9tIHRoZSBuZXR3b3JrLgogIGlmICh1cmwuaW5kZXhPZigiZ2VuZXJhdGl2ZWxhbmd1YWdlLmdvb2dsZWFwaXMuY29tIikgIT09IC0xKSByZXR1cm47CiAgLy8gUGFnZXM6IG5ldHdvcmsgZmlyc3QsIGZhbGwgYmFjayB0byBjYWNoZSB3aGVuIG9mZmxpbmUuCiAgaWYgKHJlcS5tb2RlID09PSAibmF2aWdhdGUiKSB7CiAgICBldmVudC5yZXNwb25kV2l0aCgKICAgICAgZmV0Y2gocmVxKS50aGVuKGZ1bmN0aW9uIChyZXMpIHsKICAgICAgICB2YXIgY29weSA9IHJlcy5jbG9uZSgpOwogICAgICAgIGNhY2hlcy5vcGVuKENBQ0hFKS50aGVuKGZ1bmN0aW9uIChjYWNoZSkgeyBjYWNoZS5wdXQocmVxLCBjb3B5KTsgfSk7CiAgICAgICAgcmV0dXJuIHJlczsKICAgICAgfSkuY2F0Y2goZnVuY3Rpb24gKCkgewogICAgICAgIHJldHVybiBjYWNoZXMubWF0Y2gocmVxKS50aGVuKGZ1bmN0aW9uIChoaXQpIHsgcmV0dXJuIGhpdCB8fCBjYWNoZXMubWF0Y2goIi4uL2luZGV4Lmh0bWwiKTsgfSk7CiAgICAgIH0pCiAgICApOwogICAgcmV0dXJuOwogIH0KICAvLyBTdGF0aWMgYXNzZXRzOiBjYWNoZSBmaXJzdCwgdGhlbiBuZXR3b3JrLgogIGV2ZW50LnJlc3BvbmRXaXRoKAogICAgY2FjaGVzLm1hdGNoKHJlcSkudGhlbihmdW5jdGlvbiAoaGl0KSB7CiAgICAgIGlmIChoaXQpIHJldHVybiBoaXQ7CiAgICAgIHJldHVybiBmZXRjaChyZXEpLnRoZW4oZnVuY3Rpb24gKHJlcykgewogICAgICAgIHZhciBjb3B5ID0gcmVzLmNsb25lKCk7CiAgICAgICAgY2FjaGVzLm9wZW4oQ0FDSEUpLnRoZW4oZnVuY3Rpb24gKGNhY2hlKSB7IGNhY2hlLnB1dChyZXEsIGNvcHkpOyB9KTsKICAgICAgICByZXR1cm4gcmVzOwogICAgICB9KTsKICAgIH0pCiAgKTsKfSk7Cg==").catch(function () { /* install still offered via manifest in supported browsers */ });
       });
     }
     var deferredInstallPrompt = null;
