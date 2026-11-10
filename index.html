@@ -181,19 +181,19 @@
         #keyStatus.ok { background: #123324; color: #a7f3c7; border-color: #2f6b48; }
         #keyStatus.err { background: #3a1e1a; color: #ffb4a2; border-color: #7a3a30; }
       }
-      #aiNameInput {
+      #aiNameInput, #userNameInput {
         flex: 1; min-width: 0; border: 1.5px solid var(--line); background: var(--surface-2); color: var(--ink);
         border-radius: 10px; padding: 11px 12px; font: inherit; font-size: 15px;
       }
-      #aiNameInput:focus { outline: none; border-color: var(--brand); }
-      #aiNameStatus { margin-top: 12px; font-size: 14.5px; line-height: 1.55; border-radius: 10px; padding: 10px 12px; display: none; }
-      #aiNameStatus.show { display: block; }
-      #aiNameStatus.ok { background: #e6f4ea; color: #14532d; border: 1px solid #a7d8b5; }
-      #aiNameStatus.err { background: #fdecea; color: #7a1f14; border: 1px solid #f0b4a8; }
-      #aiNameStatus.info { background: var(--accent-soft); color: var(--ink); border: 1px solid var(--line); }
+      #aiNameInput:focus, #userNameInput:focus { outline: none; border-color: var(--brand); }
+      #aiNameStatus, #userNameStatus { margin-top: 12px; font-size: 14.5px; line-height: 1.55; border-radius: 10px; padding: 10px 12px; display: none; }
+      #aiNameStatus.show, #userNameStatus.show { display: block; }
+      #aiNameStatus.ok, #userNameStatus.ok { background: #e6f4ea; color: #14532d; border: 1px solid #a7d8b5; }
+      #aiNameStatus.err, #userNameStatus.err { background: #fdecea; color: #7a1f14; border: 1px solid #f0b4a8; }
+      #aiNameStatus.info, #userNameStatus.info { background: var(--accent-soft); color: var(--ink); border: 1px solid var(--line); }
       @media (prefers-color-scheme: dark) {
-        #aiNameStatus.ok { background: #123324; color: #a7f3c7; border-color: #2f6b48; }
-        #aiNameStatus.err { background: #3a1e1a; color: #ffb4a2; border-color: #7a3a30; }
+        #aiNameStatus.ok, #userNameStatus.ok { background: #123324; color: #a7f3c7; border-color: #2f6b48; }
+        #aiNameStatus.err, #userNameStatus.err { background: #3a1e1a; color: #ffb4a2; border-color: #7a3a30; }
       }
       .privacy-note { margin-top: 14px; font-size: 13.5px; line-height: 1.6; color: var(--ink-soft); background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
       .mode-badge { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); border: 1px solid var(--line); color: var(--ink); white-space: nowrap; }
@@ -757,6 +757,18 @@
         <div id="styleStatus" role="status" aria-live="polite"></div>
         <div id="styleList" role="status" aria-live="polite"></div>
 
+        <h3 class="settings-subhead">Your name</h3>
+        <p style="font-size:14px; line-height:1.55; margin:0 0 10px;">This is <strong>your</strong> name — the one TazAI calls <em>you</em> by, like a friend. Right now TazAI knows you as <strong id="userNameCurrent">not set yet</strong>. On your first chat TazAI asks for it once; you can also set or change it here any time, or in the chat by saying <strong>“My name is …”</strong> or <strong>“Call me …”</strong>. Saved only in this browser, on this device.</p>
+        <label class="field-label" for="userNameInput">Your name</label>
+        <div class="key-row">
+          <input id="userNameInput" type="text" placeholder="e.g. Rafi, Tanvir, Arif…" maxlength="30" autocomplete="off" spellcheck="false" />
+        </div>
+        <div class="key-actions">
+          <button class="btn-primary" id="saveUserNameBtn" type="button">Save my name</button>
+          <button class="btn-secondary" id="clearUserNameBtn" type="button">Clear</button>
+        </div>
+        <div id="userNameStatus" role="status" aria-live="polite"></div>
+
         <h3 class="settings-subhead">What you call me</h3>
         <p style="font-size:14px; line-height:1.55; margin:0 0 10px;">Right now you call me <strong id="aiNameCurrent">TazAI</strong>. Give me any nickname you like — it will show in the header, and I'll introduce myself with it. You can also change it any time in the chat by saying <strong>“Call you …”</strong> followed by the name. Saved only in this browser, on this device.</p>
         <label class="field-label" for="aiNameInput">My nickname</label>
@@ -999,6 +1011,156 @@
       if (m) { n = cleanAiName(m[1]); if (n) return n; }
       return "";
     }
+    /* ================= The user's own name =================
+       On a visitor's first chat — right after the greeting, before the
+       nickname question — TazAI asks "what's your name?", the way people
+       introduce themselves when they first meet. When the visitor tells
+       it, TazAI answers warmly by name ("Nice to meet you, X!") and
+       remembers it in this browser, then calls them by name naturally
+       and only OCCASIONALLY afterwards (greetings, thanks, farewells) —
+       never in every message, which would feel robotic. Asked once
+       ever: if they decline, skip, or just chat about something else,
+       it is never asked again. They can set or change it any time in
+       chat ("My name is …", "Call me …", "Amar name …", "আমার নাম …")
+       or in Settings → "Your name". (The `userName` variable itself is
+       declared with the other session state above; the personal-memory
+       fact "User's name is X" is kept in sync, as older builds stored
+       the name only there.) */
+    var USER_NAME_STORAGE = "tazai_user_name";
+    var USER_NAME_ASKED_STORAGE = "tazai_user_name_asked";
+    try { var savedUserName = (localStorage.getItem(USER_NAME_STORAGE) || "").trim(); if (savedUserName) userName = savedUserName; } catch (e) {}
+    var userNameAsked = false;
+    try { userNameAsked = localStorage.getItem(USER_NAME_ASKED_STORAGE) === "1"; } catch (e) {}
+    var userNameFlow = false; // true while the first-run name question is open
+    function markUserNameAsked() {
+      userNameAsked = true;
+      try { localStorage.setItem(USER_NAME_ASKED_STORAGE, "1"); } catch (e) {}
+    }
+    function setUserName(n) {
+      userName = n || "";
+      markUserNameAsked();
+      try {
+        if (userName) localStorage.setItem(USER_NAME_STORAGE, userName);
+        else localStorage.removeItem(USER_NAME_STORAGE);
+      } catch (e) {}
+      if (typeof memoryFacts !== "undefined" && typeof saveMemory === "function") {
+        memoryFacts = memoryFacts.filter(function (f) { return !/^(User's name is|The user's name is)\s+/i.test(f); });
+        if (userName) memoryFacts.push("User's name is " + userName);
+        saveMemory();
+      }
+    }
+    function cleanUserName(raw) {
+      var n = String(raw || "").replace(/["“”‘’']/g, " ").replace(/\s+/g, " ").trim();
+      if (/[?？]/.test(n)) return ""; // a question is never a name
+      n = n.replace(/[.!?,;:।]+$/g, "").trim();
+      if (n.length > 30) n = n.slice(0, 30).trim();
+      if (!n || n.length < 2) return "";
+      if (!/[A-Za-z\u0980-\u09FF]/.test(n)) return "";
+      if (/^(tazai|taz ai|hi|hello|hey|salam|ok|okay|yes|no|hmm|hm|skip|none|nothing|na|nah|ki|ke|ami|amar)$/i.test(n)) return "";
+      if (/^(কি|কী|কে|না|হ্যাঁ|থাক|আমি|আমার)$/.test(n)) return "";
+      // A sentence is not a name: reject Latin text carrying sentence words.
+      if (/^[A-Za-z' -]+$/.test(n) && /\b(is|am|are|the|a|an|my|i|you|want|need|like|please|help|koro|korchi|achi|acho|achen|hobe|chai|korte|bolte|valo|bhalo|kharap|ekjon)\b/i.test(n)) return "";
+      // Friendly display: "rafi" → "Rafi", "tanvir islam" → "Tanvir Islam".
+      if (/^[a-z][a-z' -]*$/.test(n)) n = n.replace(/(^|[ '-])([a-z])/g, function (m0, p, c) { return p + c.toUpperCase(); });
+      return n;
+    }
+    // Explicit ways to tell/change your name, usable at any time:
+    // "My name is X", "Call me X", "Amar name X", "Amar nam X", "আমার নাম X".
+    function extractUserNameCommand(text) {
+      var m, n;
+      m = text.match(/(?:my name is|call me)\s+["']?([^.!?,"']{2,30})/i);
+      if (m) { n = cleanUserName(m[1]); if (n && !/^(back|later|soon|now|then|today|tomorrow|tonight|asap)$/i.test(n)) return n; }
+      m = text.match(/(?:amar|aamar)\s+(?:name|nam)\s+(?:is\s+|holo\s+|hocche\s+)?["']?([A-Za-z][A-Za-z' -]{1,29})/i);
+      if (m) { n = cleanUserName(m[1]); if (n) return n; }
+      m = text.match(/আমার নাম\s+(?:হলো\s+|হচ্ছে\s+)?([^\s।.!?]{2,24})/);
+      if (m) { n = cleanUserName(m[1]); if (n) return n; }
+      return "";
+    }
+    var NON_NAME_WORDS = { valo: 1, bhalo: 1, kharap: 1, ekjon: 1, ekta: 1, khub: 1, onek: 1, ekhon: 1, tokhon: 1, kemon: 1, ki: 1, ke: 1, keno: 1, na: 1, ha: 1, hmm: 1, hm: 1, ok: 1, okay: 1, yes: 1, no: 1, hi: 1, hello: 1, hey: 1, salam: 1, thanks: 1, thank: 1, ekhane: 1, okhane: 1, student: 1, manush: 1, chele: 1, meye: 1 };
+    // While the name question is open, a bare answer counts too: "Rafi",
+    // "Ami Rafi", "আমি রফি". Anything that looks like a request, a
+    // question, or a sentence is NOT a name (returns "").
+    function extractBareNameAnswer(clean) {
+      var s = String(clean || "").trim();
+      if (!s || s.length > 34 || /[?？]/.test(s)) return "";
+      var m = s.match(/^ami\s+(.+)$/i) || s.match(/^আমি\s+(.+)$/);
+      var cand = m ? m[1] : s;
+      var words = cand.replace(/\s+/g, " ").split(" ").filter(Boolean);
+      if (words.length < 1 || words.length > 3) return "";
+      for (var i = 0; i < words.length; i++) { if (NON_NAME_WORDS[words[i].toLowerCase()]) return ""; }
+      if (/\b(plan|tips|help|essay|cv|resume|script|image|photo|picture|story|joke|poem|song|email|math|maths|exam|study|code|coding|website|video|seo|draw|write|make|tell|show|give|explain)\b/i.test(cand)) return "";
+      return cleanUserName(cand);
+    }
+    function userNameQuestionText(lang) {
+      return L(lang,
+        "শুরু করার আগে পরিচিত হয়ে নিই — তোমার নামটা কী? নাম বললে বন্ধুর মতো মাঝে মাঝে নাম ধরে ডাকব!",
+        "Before we start, let's get introduced — what's your name? Tell me, and I'll call you by it now and then, like a friend!",
+        "Shuru korar age porichito hoye ni — tomar nam-ta ki? Nam bolle bondhur moto majhe majhe nam dhore dakbo!");
+    }
+    function niceToMeetText(lang, name, changed) {
+      if (changed) {
+        return L(lang,
+          "ঠিক আছে — এখন থেকে তোমাকে **" + name + "** বলেই ডাকব!",
+          "Got it — I'll call you **" + name + "** from now on!",
+          "Thik ache — ekhon theke tomake **" + name + "** bolei dakbo!");
+      }
+      return L(lang,
+        "তোমাকে চিনে খুব ভালো লাগলো, **" + name + "**! নামটা মনে রাখলাম — এখন থেকে মাঝে মাঝে বন্ধুর মতো নাম ধরে ডাকব। বলো, আজ কী নিয়ে সাহায্য করব?",
+        "Nice to meet you, **" + name + "**! I've remembered your name — I'll call you by it now and then, like a friend. So, what can I help you with today?",
+        "Tomake chine khub valo laglo, **" + name + "**! Nam-ta mone rakhlam — ekhon theke majhe majhe bondhur moto nam dhore dakbo. Bolo, aj ki niye sahajjo korbo?");
+    }
+    function userNameSkipText(lang) {
+      return L(lang,
+        "ঠিক আছে, কোনো সমস্যা নেই — নাম না বললেও আমরা বন্ধুই থাকলাম! বলো, কী নিয়ে সাহায্য করব?",
+        "No problem at all — you don't have to share your name, we're still friends! So, what can I help you with?",
+        "Thik ache, kono somossa nei — nam na bolleo amra bondhu-i thaklam! Bolo, ki niye sahajjo korbo?");
+    }
+    // The nickname question ("what will you call me?") — asked once ever.
+    function askNicknameQuestion(lang, delay) {
+      if (aiNameAsked) return;
+      aiNameAsked = true;
+      try { localStorage.setItem(AI_NAME_ASKED_STORAGE, "1"); } catch (e) {}
+      nameFlow = "choice";
+      setTimeout(function () {
+        if (nameFlow === "choice") botSay(nameQuestionText(lang), ["TazAI is fine", "Give a new name"]);
+      }, delay || 2100);
+    }
+    // After the name question settles, the nickname question follows
+    // after a short friendly gap — the two are never fired together.
+    function scheduleNicknameAfterName(lang, delayMs) {
+      if (aiNameAsked) return;
+      setTimeout(function () { askNicknameQuestion(lang, 500); }, delayMs || 2800);
+    }
+    // Handles the reply while the first-run name question is open.
+    // Returns true when the message was consumed (a name, or a polite
+    // decline); when the visitor clearly moved on to something else it
+    // closes the question and returns false so the message is answered
+    // normally — and the question is never asked again either way.
+    function handleUserNameFlow(clean) {
+      var lang = resolveLang(clean);
+      var low = clean.toLowerCase().trim();
+      if (/^(skip|no|na|nah|nope|not now|later|pass|থাক|বাদ দাও|বলব না|বলবো না|বলবনা|বলতে চাই না|bolbo na|bolte chai na|chai na|lagbe na|dorkar nai|no thanks|no thank you)\b/i.test(low)
+          || /don'?t want to (say|tell|share)/i.test(low) || /বলতে চাই না/.test(clean)) {
+        userNameFlow = false;
+        markUserNameAsked();
+        botSay(userNameSkipText(lang));
+        scheduleNicknameAfterName(lang, 2800);
+        return true;
+      }
+      var told = extractUserNameCommand(clean) || extractBareNameAnswer(clean);
+      if (told) {
+        userNameFlow = false;
+        var wasKnown = !!userName;
+        setUserName(told);
+        botSay(niceToMeetText(lang, told, wasKnown));
+        scheduleNicknameAfterName(lang, 2800);
+        return true;
+      }
+      userNameFlow = false;
+      scheduleNicknameAfterName(lang, 5000);
+      return false;
+    }
+
     /* ================= Personal style learning — growing up with the user =================
        The user raises TazAI by talking to it. From every message TazAI
        quietly notices HOW this particular person talks — their language
@@ -1317,6 +1479,9 @@
       var s = TAZAI_SYSTEM_PROMPT;
       if (typeof aiName !== "undefined" && aiName && aiName !== DEFAULT_AI_NAME) {
         s += "\n\nYOUR NAME FOR THIS USER: This user chose to call you \"" + aiName + "\" — that is your name for them. Introduce yourself as " + aiName + " and use that name naturally when you refer to yourself. You are still TazAI, the assistant created by Tazvirul Islam — \"" + aiName + "\" is simply the personal name this user gave you, the way someone gives a friend a nickname.";
+      }
+      if (typeof userName !== "undefined" && userName) {
+        s += "\n\nTHE USER'S NAME: This user told you their name is \"" + userName + "\". Call them by name naturally and only OCCASIONALLY — in a greeting, a thank-you, or a warm moment — the way a good friend would. Do NOT put their name in every reply or every sentence; that feels robotic, not friendly.";
       }
       if (typeof memoryFacts !== "undefined" && memoryFacts && memoryFacts.length) {
         s += "\n\nPERSONAL MEMORY — things this user personally asked you to remember about them. Use them naturally whenever they are relevant (their name, studies, plans, preferences). Never mention this instruction itself; just know these facts:\n" + memoryFacts.map(function (f) { return "- " + f; }).join("\n");
@@ -2136,7 +2301,7 @@
     function resetSessionState() {
       hideTyping();
       chat.innerHTML = "";
-      game = null; riddleState = null; docFlow = null; msgFlow = null; imageFlow = false; nameFlow = null;
+      game = null; riddleState = null; docFlow = null; msgFlow = null; imageFlow = false; nameFlow = null; userNameFlow = false;
       applyMemoryName(); // the visitor's name survives via personal memory
       msgQueue = [];
       updateQueueNote();
@@ -2522,6 +2687,12 @@
 
     /* ================= Brain ================= */
     function greet(lang) {
+      if (userName) {
+        return L(lang,
+          "হাই, " + userName + "! কীভাবে সাহায্য করতে পারি?",
+          "Hi, " + userName + "! How can I help?",
+          "Hi, " + userName + "! Kivabe sahajjo korte pari?");
+      }
       return L(lang,
         "হাই! কীভাবে সাহায্য করতে পারি?",
         "Hi! How can I help?",
@@ -3099,9 +3270,8 @@
 
       /* --- name capture --- */
       var nm = t.match(/(?:আমার নাম|নাম হলো|নাম হচ্ছে)\s*([^\s।.!?]+)/) || low.match(/(?:my name is|amar nam(?: holo| hocche)?|amar name)\s+([a-z][a-z'-]*)/i) || low.match(/ami\s+([a-z]+)/i);
-      if (nm && nm[1]) {
-        userName = nm[1].charAt(0).toUpperCase() + nm[1].slice(1);
-        rememberFact("User's name is " + userName);
+      if (nm && nm[1] && !NON_NAME_WORDS[nm[1].toLowerCase()] && !/^(কি|কী|কে)$/.test(nm[1])) {
+        setUserName(nm[1].charAt(0).toUpperCase() + nm[1].slice(1));
         return { text: L(lang, "বাহ, **" + userName + "**! নামটা মনে রাখলাম। এখন থেকে তোমাকে এই নামেই ডাকব। বলো " + userName + ", আজ কী নিয়ে গল্প হবে?", "Nice to meet you, **" + userName + "**! I'll call you that from now on. So, what shall we talk about?", "Bah, **" + userName + "**! Nam-ta mone rakhlam. Ekhon theke tomake ei nam-ei dakbo. Bolo " + userName + ", aj ki niye golpo hobe?") };
       }
       if (/(আমার নাম কি|আমার নাম কী|আমার নামটা|what is my name|আমাকে কি নামে|amar nam ki|amar namta ki|amake ki name dakbe)/i.test(low)) {
@@ -3968,10 +4138,26 @@
         var renameTo = extractRename(clean);
         if (renameTo) {
           nameFlow = null;
+          userNameFlow = false;
           setAiName(renameTo);
           botSay(nameSetText(resolveLang(clean), renameTo));
           return;
         }
+        // The user's own name: an explicit "My name is …" / "Call me …" /
+        // "Amar name …" / "আমার নাম …" works at any time, and while the
+        // first-run name question is open the reply is its answer — both
+        // handled here, before the nickname flow and any other routing.
+        var toldName = extractUserNameCommand(clean);
+        if (toldName) {
+          var nameWasKnown = !!userName;
+          userNameFlow = false;
+          nameFlow = null;
+          setUserName(toldName);
+          botSay(niceToMeetText(resolveLang(clean), toldName, nameWasKnown));
+          scheduleNicknameAfterName(resolveLang(clean), 2800);
+          return;
+        }
+        if (userNameFlow && handleUserNameFlow(clean)) { try { input.focus(); } catch (e) {} return; }
         if (nameFlow && handleNameFlow(clean)) { try { input.focus(); } catch (e) {} return; }
       }
       if (imageToSend) {
@@ -4355,6 +4541,36 @@
       setAiNameStatus("ok", "Reset — I'm TazAI again.");
     });
 
+    /* ================= Settings: your name ================= */
+    var userNameInput = document.getElementById("userNameInput");
+    var userNameStatus = document.getElementById("userNameStatus");
+    var userNameCurrent = document.getElementById("userNameCurrent");
+    var saveUserNameBtn = document.getElementById("saveUserNameBtn");
+    var clearUserNameBtn = document.getElementById("clearUserNameBtn");
+    function setUserNameStatus(kind, msg) {
+      if (!userNameStatus) return;
+      if (!msg) { userNameStatus.className = ""; userNameStatus.textContent = ""; return; }
+      userNameStatus.className = "show " + kind;
+      userNameStatus.textContent = msg;
+    }
+    function refreshUserNameUI() {
+      if (userNameCurrent) userNameCurrent.textContent = userName || "not set yet";
+      if (userNameInput) userNameInput.value = userName || "";
+    }
+    if (saveUserNameBtn) saveUserNameBtn.addEventListener("click", function () {
+      var n = cleanUserName(userNameInput ? userNameInput.value : "");
+      if (!n) { setUserNameStatus("err", "That name doesn't look usable — type your name with letters (Latin or Bengali), up to 30 characters."); return; }
+      setUserName(n);
+      refreshUserNameUI();
+      setUserNameStatus("ok", "Done — nice to meet you, " + n + "! TazAI will call you by name now and then, like a friend.");
+    });
+    if (clearUserNameBtn) clearUserNameBtn.addEventListener("click", function () {
+      var had = userName;
+      setUserName("");
+      refreshUserNameUI();
+      setUserNameStatus("info", had ? "Cleared — TazAI won't call you by name anymore. You can set it again here or in the chat any time." : "No name was saved — nothing to clear.");
+    });
+
     /* ================= Settings (Gemini key) wiring ================= */
     var settingsOverlay = document.getElementById("settingsOverlay");
     var apiKeyInput = document.getElementById("apiKeyInput");
@@ -4371,6 +4587,7 @@
     function openSettings() {
       if (apiKeyInput) apiKeyInput.value = geminiKey || "";
       refreshAiNameUI();
+      if (typeof refreshUserNameUI === "function") refreshUserNameUI();
       if (typeof refreshStyleUI === "function") refreshStyleUI();
       if (geminiKey) setKeyStatus("ok", "Your Gemini key is saved in this browser, so TazAI is answering through your own key directly. (The real AI is on for everyone either way — your key just uses your own quota.) Hard questions come with references too.");
       else setKeyStatus("info", "No key saved — TazAI's AI is already on for everyone through its own connection. Adding your own free key below is optional: TazAI will then use your key directly.");
@@ -4432,19 +4649,22 @@
       note.textContent = "Today is " + EN_DAYS[d.getDay()] + ", " + EN_MONTHS[d.getMonth()] + " " + d.getDate() + ", " + d.getFullYear();
       chat.appendChild(note);
       botSay(greet(langPref === "bn" ? "bn" : "en"));
-      // First visit only: right after the greeting, ask what to call the AI
-      // — "TazAI", or a nickname of the visitor's choice. Asked once ever
-      // (the flag is saved); if they ignore it and just chat, the question
-      // quietly closes and never nags again.
-      if (!aiNameAsked) {
-        aiNameAsked = true;
-        try { localStorage.setItem(AI_NAME_ASKED_STORAGE, "1"); } catch (e) {}
-        nameFlow = "choice";
+      // First meeting: right after the greeting, TazAI asks the USER's
+      // name first — the natural way to meet someone. Only once that is
+      // settled does the nickname question ("will you call me TazAI…?")
+      // follow, after a friendly gap (see handleUserNameFlow /
+      // scheduleNicknameAfterName) — never both at once. Each question
+      // is asked once ever (its flag is saved in this browser); if the
+      // visitor ignores one and just chats, it quietly closes.
+      var startLang = langPref === "bn" ? "bn" : "en";
+      if (!userName && !userNameAsked) {
+        markUserNameAsked();
+        userNameFlow = true;
         setTimeout(function () {
-          if (nameFlow === "choice") {
-            botSay(nameQuestionText(langPref === "bn" ? "bn" : "en"), ["TazAI is fine", "Give a new name"]);
-          }
+          if (userNameFlow) botSay(userNameQuestionText(startLang));
         }, 2100);
+      } else if (!aiNameAsked) {
+        askNicknameQuestion(startLang, 2100);
       }
     }
     updateModeUI();
@@ -4455,7 +4675,7 @@
     /* ================= PWA: service worker + install ================= */
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", function () {
-        navigator.serviceWorker.register("data:application/javascript;base64,LyogVGF6QUkgc2VydmljZSB3b3JrZXIg4oCUIG9mZmxpbmUgc2hlbGwgZm9yIHRoZSBhcHAuCiAgIFNjb3BlIG5vdGU6IHRoaXMgZmlsZSBsaXZlcyB1bmRlciBhc3NldHMvLCBzbyB0aGUgYnJvd3NlciBsaW1pdHMgaXRzCiAgIHNjb3BlIHRvIHRoYXQgZm9sZGVyOyBpdCBzdGlsbCBwcm92aWRlcyB0aGUgZmV0Y2ggaGFuZGxlciBhbmQgY2FjaGVzCiAgIHRoZSBhcHAgaWNvbnMvbWFuaWZlc3QuIEdlbWluaSBBUEkgY2FsbHMgYXJlIG5ldmVyIGNhY2hlZC4gKi8KdmFyIENBQ0hFID0gInRhemFpLXYxNSI7CnZhciBDT1JFID0gWwogICIuL2ljb24tMTkyLnBuZyIsCiAgIi4vaWNvbi01MTIucG5nIiwKICAiLi9pY29uLW1hc2thYmxlLTUxMi5wbmciLAogICIuL2FwcGxlLXRvdWNoLWljb24ucG5nIiwKICAiLi9wcm9maWxlLnBuZyIsCiAgIi4vZmFjZS5wbmciLAogICIuL21hbmlmZXN0LndlYm1hbmlmZXN0IgpdOwoKc2VsZi5hZGRFdmVudExpc3RlbmVyKCJpbnN0YWxsIiwgZnVuY3Rpb24gKGV2ZW50KSB7CiAgZXZlbnQud2FpdFVudGlsKAogICAgY2FjaGVzLm9wZW4oQ0FDSEUpLnRoZW4oZnVuY3Rpb24gKGNhY2hlKSB7IHJldHVybiBjYWNoZS5hZGRBbGwoQ09SRSk7IH0pLnRoZW4oZnVuY3Rpb24gKCkgeyByZXR1cm4gc2VsZi5za2lwV2FpdGluZygpOyB9KQogICk7Cn0pOwoKc2VsZi5hZGRFdmVudExpc3RlbmVyKCJhY3RpdmF0ZSIsIGZ1bmN0aW9uIChldmVudCkgewogIGV2ZW50LndhaXRVbnRpbCgKICAgIGNhY2hlcy5rZXlzKCkudGhlbihmdW5jdGlvbiAoa2V5cykgewogICAgICByZXR1cm4gUHJvbWlzZS5hbGwoa2V5cy5tYXAoZnVuY3Rpb24gKGspIHsgcmV0dXJuIGsgPT09IENBQ0hFID8gbnVsbCA6IGNhY2hlcy5kZWxldGUoayk7IH0pKTsKICAgIH0pLnRoZW4oZnVuY3Rpb24gKCkgeyByZXR1cm4gc2VsZi5jbGllbnRzLmNsYWltKCk7IH0pCiAgKTsKfSk7CgpzZWxmLmFkZEV2ZW50TGlzdGVuZXIoImZldGNoIiwgZnVuY3Rpb24gKGV2ZW50KSB7CiAgdmFyIHJlcSA9IGV2ZW50LnJlcXVlc3Q7CiAgaWYgKHJlcS5tZXRob2QgIT09ICJHRVQiKSByZXR1cm47CiAgdmFyIHVybCA9IHJlcS51cmwgfHwgIiI7CiAgLy8gTmV2ZXIgdG91Y2ggR2VtaW5pIEFQSSB0cmFmZmljIOKAlCBhbHdheXMgbGl2ZSBmcm9tIHRoZSBuZXR3b3JrLgogIGlmICh1cmwuaW5kZXhPZigiZ2VuZXJhdGl2ZWxhbmd1YWdlLmdvb2dsZWFwaXMuY29tIikgIT09IC0xKSByZXR1cm47CiAgLy8gUGFnZXM6IG5ldHdvcmsgZmlyc3QsIGZhbGwgYmFjayB0byBjYWNoZSB3aGVuIG9mZmxpbmUuCiAgaWYgKHJlcS5tb2RlID09PSAibmF2aWdhdGUiKSB7CiAgICBldmVudC5yZXNwb25kV2l0aCgKICAgICAgZmV0Y2gocmVxKS50aGVuKGZ1bmN0aW9uIChyZXMpIHsKICAgICAgICB2YXIgY29weSA9IHJlcy5jbG9uZSgpOwogICAgICAgIGNhY2hlcy5vcGVuKENBQ0hFKS50aGVuKGZ1bmN0aW9uIChjYWNoZSkgeyBjYWNoZS5wdXQocmVxLCBjb3B5KTsgfSk7CiAgICAgICAgcmV0dXJuIHJlczsKICAgICAgfSkuY2F0Y2goZnVuY3Rpb24gKCkgewogICAgICAgIHJldHVybiBjYWNoZXMubWF0Y2gocmVxKS50aGVuKGZ1bmN0aW9uIChoaXQpIHsgcmV0dXJuIGhpdCB8fCBjYWNoZXMubWF0Y2goIi4uL2luZGV4Lmh0bWwiKTsgfSk7CiAgICAgIH0pCiAgICApOwogICAgcmV0dXJuOwogIH0KICAvLyBTdGF0aWMgYXNzZXRzOiBjYWNoZSBmaXJzdCwgdGhlbiBuZXR3b3JrLgogIGV2ZW50LnJlc3BvbmRXaXRoKAogICAgY2FjaGVzLm1hdGNoKHJlcSkudGhlbihmdW5jdGlvbiAoaGl0KSB7CiAgICAgIGlmIChoaXQpIHJldHVybiBoaXQ7CiAgICAgIHJldHVybiBmZXRjaChyZXEpLnRoZW4oZnVuY3Rpb24gKHJlcykgewogICAgICAgIHZhciBjb3B5ID0gcmVzLmNsb25lKCk7CiAgICAgICAgY2FjaGVzLm9wZW4oQ0FDSEUpLnRoZW4oZnVuY3Rpb24gKGNhY2hlKSB7IGNhY2hlLnB1dChyZXEsIGNvcHkpOyB9KTsKICAgICAgICByZXR1cm4gcmVzOwogICAgICB9KTsKICAgIH0pCiAgKTsKfSk7Cg==").catch(function () { /* install still offered via manifest in supported browsers */ });
+        navigator.serviceWorker.register("data:application/javascript;base64,LyogVGF6QUkgc2VydmljZSB3b3JrZXIg4oCUIG9mZmxpbmUgc2hlbGwgZm9yIHRoZSBhcHAuCiAgIFNjb3BlIG5vdGU6IHRoaXMgZmlsZSBsaXZlcyB1bmRlciBhc3NldHMvLCBzbyB0aGUgYnJvd3NlciBsaW1pdHMgaXRzCiAgIHNjb3BlIHRvIHRoYXQgZm9sZGVyOyBpdCBzdGlsbCBwcm92aWRlcyB0aGUgZmV0Y2ggaGFuZGxlciBhbmQgY2FjaGVzCiAgIHRoZSBhcHAgaWNvbnMvbWFuaWZlc3QuIEdlbWluaSBBUEkgY2FsbHMgYXJlIG5ldmVyIGNhY2hlZC4gKi8KdmFyIENBQ0hFID0gInRhemFpLXYxNiI7CnZhciBDT1JFID0gWwogICIuL2ljb24tMTkyLnBuZyIsCiAgIi4vaWNvbi01MTIucG5nIiwKICAiLi9pY29uLW1hc2thYmxlLTUxMi5wbmciLAogICIuL2FwcGxlLXRvdWNoLWljb24ucG5nIiwKICAiLi9wcm9maWxlLnBuZyIsCiAgIi4vZmFjZS5wbmciLAogICIuL21hbmlmZXN0LndlYm1hbmlmZXN0IgpdOwoKc2VsZi5hZGRFdmVudExpc3RlbmVyKCJpbnN0YWxsIiwgZnVuY3Rpb24gKGV2ZW50KSB7CiAgZXZlbnQud2FpdFVudGlsKAogICAgY2FjaGVzLm9wZW4oQ0FDSEUpLnRoZW4oZnVuY3Rpb24gKGNhY2hlKSB7IHJldHVybiBjYWNoZS5hZGRBbGwoQ09SRSk7IH0pLnRoZW4oZnVuY3Rpb24gKCkgeyByZXR1cm4gc2VsZi5za2lwV2FpdGluZygpOyB9KQogICk7Cn0pOwoKc2VsZi5hZGRFdmVudExpc3RlbmVyKCJhY3RpdmF0ZSIsIGZ1bmN0aW9uIChldmVudCkgewogIGV2ZW50LndhaXRVbnRpbCgKICAgIGNhY2hlcy5rZXlzKCkudGhlbihmdW5jdGlvbiAoa2V5cykgewogICAgICByZXR1cm4gUHJvbWlzZS5hbGwoa2V5cy5tYXAoZnVuY3Rpb24gKGspIHsgcmV0dXJuIGsgPT09IENBQ0hFID8gbnVsbCA6IGNhY2hlcy5kZWxldGUoayk7IH0pKTsKICAgIH0pLnRoZW4oZnVuY3Rpb24gKCkgeyByZXR1cm4gc2VsZi5jbGllbnRzLmNsYWltKCk7IH0pCiAgKTsKfSk7CgpzZWxmLmFkZEV2ZW50TGlzdGVuZXIoImZldGNoIiwgZnVuY3Rpb24gKGV2ZW50KSB7CiAgdmFyIHJlcSA9IGV2ZW50LnJlcXVlc3Q7CiAgaWYgKHJlcS5tZXRob2QgIT09ICJHRVQiKSByZXR1cm47CiAgdmFyIHVybCA9IHJlcS51cmwgfHwgIiI7CiAgLy8gTmV2ZXIgdG91Y2ggR2VtaW5pIEFQSSB0cmFmZmljIOKAlCBhbHdheXMgbGl2ZSBmcm9tIHRoZSBuZXR3b3JrLgogIGlmICh1cmwuaW5kZXhPZigiZ2VuZXJhdGl2ZWxhbmd1YWdlLmdvb2dsZWFwaXMuY29tIikgIT09IC0xKSByZXR1cm47CiAgLy8gUGFnZXM6IG5ldHdvcmsgZmlyc3QsIGZhbGwgYmFjayB0byBjYWNoZSB3aGVuIG9mZmxpbmUuCiAgaWYgKHJlcS5tb2RlID09PSAibmF2aWdhdGUiKSB7CiAgICBldmVudC5yZXNwb25kV2l0aCgKICAgICAgZmV0Y2gocmVxKS50aGVuKGZ1bmN0aW9uIChyZXMpIHsKICAgICAgICB2YXIgY29weSA9IHJlcy5jbG9uZSgpOwogICAgICAgIGNhY2hlcy5vcGVuKENBQ0hFKS50aGVuKGZ1bmN0aW9uIChjYWNoZSkgeyBjYWNoZS5wdXQocmVxLCBjb3B5KTsgfSk7CiAgICAgICAgcmV0dXJuIHJlczsKICAgICAgfSkuY2F0Y2goZnVuY3Rpb24gKCkgewogICAgICAgIHJldHVybiBjYWNoZXMubWF0Y2gocmVxKS50aGVuKGZ1bmN0aW9uIChoaXQpIHsgcmV0dXJuIGhpdCB8fCBjYWNoZXMubWF0Y2goIi4uL2luZGV4Lmh0bWwiKTsgfSk7CiAgICAgIH0pCiAgICApOwogICAgcmV0dXJuOwogIH0KICAvLyBTdGF0aWMgYXNzZXRzOiBjYWNoZSBmaXJzdCwgdGhlbiBuZXR3b3JrLgogIGV2ZW50LnJlc3BvbmRXaXRoKAogICAgY2FjaGVzLm1hdGNoKHJlcSkudGhlbihmdW5jdGlvbiAoaGl0KSB7CiAgICAgIGlmIChoaXQpIHJldHVybiBoaXQ7CiAgICAgIHJldHVybiBmZXRjaChyZXEpLnRoZW4oZnVuY3Rpb24gKHJlcykgewogICAgICAgIHZhciBjb3B5ID0gcmVzLmNsb25lKCk7CiAgICAgICAgY2FjaGVzLm9wZW4oQ0FDSEUpLnRoZW4oZnVuY3Rpb24gKGNhY2hlKSB7IGNhY2hlLnB1dChyZXEsIGNvcHkpOyB9KTsKICAgICAgICByZXR1cm4gcmVzOwogICAgICB9KTsKICAgIH0pCiAgKTsKfSk7Cg==").catch(function () { /* install still offered via manifest in supported browsers */ });
       });
     }
     var deferredInstallPrompt = null;
