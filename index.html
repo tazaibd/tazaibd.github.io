@@ -553,6 +553,19 @@
       #memoryList { margin-top: 12px; font-size: 14.5px; line-height: 1.6; border-radius: 10px; padding: 10px 12px; display: none; background: var(--surface-2); border: 1px solid var(--line); }
       #memoryList.show { display: block; }
       #memoryList ul { margin: 6px 0 0; padding-left: 20px; }
+      #styleList { margin-top: 12px; font-size: 14.5px; line-height: 1.6; border-radius: 10px; padding: 10px 12px; display: none; background: var(--surface-2); border: 1px solid var(--line); }
+      #styleList.show { display: block; }
+      #styleList ul { margin: 6px 0 0; padding-left: 20px; }
+      #styleStatus { margin-top: 12px; font-size: 14.5px; line-height: 1.55; border-radius: 10px; padding: 10px 12px; display: none; }
+      #styleStatus.show { display: block; }
+      #styleStatus.ok { background: #e6f4ea; color: #14532d; border: 1px solid #a7d8b5; }
+      #styleStatus.info { background: var(--accent-soft); color: var(--ink); border: 1px solid var(--line); }
+      @media (prefers-color-scheme: dark) {
+        #styleStatus.ok { background: #123324; color: #a7f3c7; border-color: #2f6b48; }
+      }
+      .style-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+      @media (max-width: 560px) { .style-grid { grid-template-columns: 1fr; } }
+      .style-grid .field-label { margin-top: 10px; }
       #docPreview {
         display: flex; gap: 10px; align-items: center;
         padding: 8px 14px;
@@ -710,6 +723,39 @@
           <button class="btn-danger" id="clearMemoryBtn" type="button">Clear memory</button>
         </div>
         <div id="memoryList" role="status" aria-live="polite"></div>
+
+        <h3 class="settings-subhead">Growing up with you — how TazAI learns you</h3>
+        <p style="font-size:14px; line-height:1.55; margin:0 0 10px;">Think of TazAI as growing up with you: <strong>you raise it by talking to it</strong>, and it slowly gets to know <em>you</em> — your words, your ways, what you like. From every conversation it quietly learns your language mix (English / বাংলা / Banglish), whether you write short or long, and whether you sound formal, friendly, casual or funny — then <strong>little by little, it starts speaking the way you like</strong>. There is no form you have to fill in — it learns just from talking, and it changes as you change; the two choices below are only there if you want to teach it directly, a little faster. Teach it directly any time — say <strong>“Reply short”</strong>, <strong>“Talk casually, like a friend”</strong>, <strong>“Be formal”</strong>, or ask <strong>“How do I talk?”</strong> / <strong>“What have you learned about me?”</strong> to hear what it has picked up from you so far. Saved only in this browser, on this device.</p>
+        <div class="key-actions" style="margin-top:0;">
+          <button class="btn-primary" id="styleToggleBtn" type="button">Style learning: On</button>
+          <button class="btn-secondary" id="viewStyleBtn" type="button">What have you learned?</button>
+          <button class="btn-danger" id="resetStyleBtn" type="button">Forget my style</button>
+        </div>
+        <div class="style-grid">
+          <div>
+            <label class="field-label" for="styleLengthSelect">Reply length you like</label>
+            <select class="lang-select" id="styleLengthSelect">
+              <option value="auto">Auto — learn from how I write</option>
+              <option value="short">Short — brief answers</option>
+              <option value="balanced">Balanced — medium answers</option>
+              <option value="detailed">Detailed — full, long answers</option>
+            </select>
+          </div>
+          <div>
+            <label class="field-label" for="styleToneSelect">Tone you like</label>
+            <select class="lang-select" id="styleToneSelect">
+              <option value="auto">Auto — learn from how I talk</option>
+              <option value="friendly">Friendly — warm, like a friend</option>
+              <option value="casual">Casual — relaxed, informal</option>
+              <option value="funny">Funny — light and playful</option>
+              <option value="formal">Formal — polite and proper</option>
+              <option value="professional">Professional — crisp, for work</option>
+            </select>
+          </div>
+        </div>
+        <p class="lang-note">Your explicit choices above always win over what TazAI guesses from your messages. Learning is saved only in this browser, on this device — turn it off or forget it any time.</p>
+        <div id="styleStatus" role="status" aria-live="polite"></div>
+        <div id="styleList" role="status" aria-live="polite"></div>
 
         <h3 class="settings-subhead">What you call me</h3>
         <p style="font-size:14px; line-height:1.55; margin:0 0 10px;">Right now you call me <strong id="aiNameCurrent">TazAI</strong>. Give me any nickname you like — it will show in the header, and I'll introduce myself with it. You can also change it any time in the chat by saying <strong>“Call you …”</strong> followed by the name. Saved only in this browser, on this device.</p>
@@ -953,6 +999,200 @@
       if (m) { n = cleanAiName(m[1]); if (n) return n; }
       return "";
     }
+    /* ================= Personal style learning — growing up with the user =================
+       The user raises TazAI by talking to it. From every message TazAI
+       quietly notices HOW this particular person talks — their language
+       mix, message length, formality (apni / tumi / tui), casual words,
+       emoji habits, question style — and saves a small growing profile in
+       this browser only. The profile is fed into every Gemini call (see
+       systemPromptText) so replies gradually shift toward the way THIS
+       user likes: slowly, naturally, more strongly the more they have
+       talked — never a sudden personality swap, never announced unless
+       the user asks. Explicit teaching ("reply short", "talk casually",
+       "be formal") always wins over anything guessed. The user can see
+       what was learned, turn learning off, or forget it, in Settings. */
+    var STYLE_KEY = "tazai_style_v1";
+    function defaultStyleProfile() {
+      return {
+        enabled: true,
+        total: 0, bn: 0, bl: 0, en: 0,
+        totalWords: 0, totalChars: 0,
+        shortMsgs: 0, longMsgs: 0,
+        emojiMsgs: 0, emojiTotal: 0,
+        exclaimMsgs: 0, questionMsgs: 0,
+        casualHits: 0, formalHits: 0,
+        apniHits: 0, tumiHits: 0, tuiHits: 0,
+        greetMsgs: 0, thanksMsgs: 0,
+        topics: {},
+        explicitLength: "auto", explicitTone: "auto",
+        firstSeen: 0, lastSeen: 0
+      };
+    }
+    var styleProfile = (function () {
+      try {
+        var raw = JSON.parse(localStorage.getItem(STYLE_KEY) || "null");
+        if (!raw || typeof raw !== "object") return defaultStyleProfile();
+        var d = defaultStyleProfile();
+        for (var k in d) { if (raw[k] !== undefined) d[k] = raw[k]; }
+        if (!d.topics || typeof d.topics !== "object") d.topics = {};
+        return d;
+      } catch (e) { return defaultStyleProfile(); }
+    })();
+    function saveStyleProfile() {
+      try { localStorage.setItem(STYLE_KEY, JSON.stringify(styleProfile)); } catch (e) {}
+    }
+    function resetStyleProfile() {
+      var keepEnabled = styleProfile.enabled;
+      styleProfile = defaultStyleProfile();
+      styleProfile.enabled = keepEnabled;
+      saveStyleProfile();
+    }
+    var STYLE_CASUAL_WORDS = ["vai", "bhai", "bro", "dost", "dosto", "yaar", "yar", "lol", "haha", "hehe", "pls", "plz", "thx", "kire", "areh", "arre", "uff", "accha", "acha", "okayy", "okk", "hmm", "yep", "yeah", "nah", "gonna", "wanna", "kinda", "btw", "asap", "vaiya", "apu", "mama", "bondhu"];
+    var STYLE_FORMAL_WORDS = ["please", "kindly", "sir", "madam", "thank you", "regards", "sincerely", "request", "apni", "apnar", "apnake", "দয়া করে", "অনুগ্রহ", "জনাব"];
+    var STYLE_TOPIC_WORDS = {
+      "study & exams": ["exam", "porikkha", "পরীক্ষা", "study", "pora", "পড়া", "class", "college", "semester", "assignment", "homework", "mcq", "note"],
+      "coding & tech": ["code", "coding", "python", "javascript", "program", "bug", "error", "website", "app", "computer", "linux", "os"],
+      "videos & content": ["video", "thumbnail", "youtube", "shorts", "script", "content", "channel", "reels", "tiktok"],
+      "writing & documents": ["email", "cv", "letter", "application", "essay", "document", "report", "likhe dao", "লিখে দাও"],
+      "money & business": ["business", "taka", "টাকা", "price", "dam", "দাম", "freelanc", "client", "income", "budget", "loan"]
+    };
+    function countWordHits(low, words) {
+      var n = 0;
+      for (var i = 0; i < words.length; i++) {
+        if (low.indexOf(words[i]) !== -1) n++;
+      }
+      return n;
+    }
+    // Silently notice explicit teaching inside ANY message, e.g. "explain
+    // this in short" or "boro kore bolo" — the preference sticks from then on.
+    function noteExplicitStyleInText(low) {
+      var changed = false;
+      if (/(reply|answer|bol|bolo|বলো|বল|likh|write|respond)[^.!?]{0,24}(short|brief|choto|ছোট|সংক্ষেপ)|^(short|brief|choto)\b|(in short|briefly|সংক্ষেপে|choto kore|ছোট করে)/i.test(low)) {
+        if (styleProfile.explicitLength !== "short") { styleProfile.explicitLength = "short"; changed = true; }
+      } else if (/(in detail|detailed|boro kore|বড় করে|bistarito|বিস্তারিত|long answer|detail e bolo|detail-?e)/i.test(low)) {
+        if (styleProfile.explicitLength !== "detailed") { styleProfile.explicitLength = "detailed"; changed = true; }
+      }
+      if (/(be formal|formal(ly)? (talk|speak|reply|bolo|tone)|formal vabe|formal ভাবে)/i.test(low)) {
+        if (styleProfile.explicitTone !== "formal") { styleProfile.explicitTone = "formal"; changed = true; }
+      } else if (/(be professional|professional (talk|tone|vabe|ভাবে))/i.test(low)) {
+        if (styleProfile.explicitTone !== "professional") { styleProfile.explicitTone = "professional"; changed = true; }
+      } else if (/(funny (talk|tone|vabe)|moja kore|মজা করে|hasir|হাসির|be funny)/i.test(low)) {
+        if (styleProfile.explicitTone !== "funny") { styleProfile.explicitTone = "funny"; changed = true; }
+      } else if (/(casual(ly)? (talk|speak|bolo|tone)|casual vabe|bondhur moto|বন্ধুর মতো|like a friend|friendly (talk|tone|vabe))/i.test(low)) {
+        if (styleProfile.explicitTone !== "casual") { styleProfile.explicitTone = "casual"; changed = true; }
+      }
+      return changed;
+    }
+    function observeUserStyle(text) {
+      if (!styleProfile.enabled) return;
+      var t = (text || "").trim();
+      if (!t) return;
+      // Pure button taps / one-word commands teach almost nothing — still
+      // count the language, but skip very mechanical inputs.
+      var low = t.toLowerCase();
+      var now = Date.now();
+      if (!styleProfile.firstSeen) styleProfile.firstSeen = now;
+      styleProfile.lastSeen = now;
+      styleProfile.total++;
+      var lg = "en";
+      try { lg = (typeof detectLang === "function") ? detectLang(t) : "en"; } catch (e) {}
+      if (lg === "bn") styleProfile.bn++; else if (lg === "bl") styleProfile.bl++; else styleProfile.en++;
+      var words = t.split(/\s+/).filter(Boolean);
+      var wc = words.length;
+      styleProfile.totalWords += wc;
+      styleProfile.totalChars += t.length;
+      if (wc <= 5) styleProfile.shortMsgs++;
+      if (wc >= 25) styleProfile.longMsgs++;
+      var emojiHits = t.match(/[\uD83C-\uDBFF][\uDC00-\uDFFF]|[\u2600-\u27BF\u2B00-\u2BFF]/g);
+      if (emojiHits && emojiHits.length) { styleProfile.emojiMsgs++; styleProfile.emojiTotal += emojiHits.length; }
+      if (t.indexOf("!") !== -1) styleProfile.exclaimMsgs++;
+      if (t.indexOf("?") !== -1 || /\?\s*$/.test(t)) styleProfile.questionMsgs++;
+      styleProfile.casualHits += countWordHits(low, STYLE_CASUAL_WORDS);
+      styleProfile.formalHits += countWordHits(low, STYLE_FORMAL_WORDS);
+      styleProfile.apniHits += (low.match(/\b(apni|apnar|apnake)\b/g) || []).length + (t.match(/আপনি|আপনার|আপনাকে/g) || []).length;
+      styleProfile.tumiHits += (low.match(/\b(tumi|tomar|tomake)\b/g) || []).length + (t.match(/তুমি|তোমার|তোমাকে/g) || []).length;
+      styleProfile.tuiHits += (low.match(/\b(tui|tor|toke)\b/g) || []).length + (t.match(/তুই|তোর|তোকে/g) || []).length;
+      if (/^(hi|hello|hey|assalamu|সালাম|হাই|হ্যালো|kemon|কেমন)/i.test(t)) styleProfile.greetMsgs++;
+      if (/(thanks|thank you|dhonnobad|ধন্যবাদ|shukria)/i.test(low)) styleProfile.thanksMsgs++;
+      for (var topic in STYLE_TOPIC_WORDS) {
+        if (countWordHits(low, STYLE_TOPIC_WORDS[topic]) > 0) styleProfile.topics[topic] = (styleProfile.topics[topic] || 0) + 1;
+      }
+      noteExplicitStyleInText(low);
+      saveStyleProfile();
+    }
+    function styleConfidence() {
+      if (styleProfile.total < 3) return "just beginning";
+      if (styleProfile.total < 10) return "growing";
+      if (styleProfile.total < 30) return "getting to know them well";
+      return "knows them well";
+    }
+    function styleLengthPref() {
+      if (styleProfile.explicitLength && styleProfile.explicitLength !== "auto") return styleProfile.explicitLength;
+      if (!styleProfile.total) return "balanced";
+      var avg = styleProfile.totalWords / Math.max(1, styleProfile.total);
+      if (avg <= 6 && styleProfile.shortMsgs >= styleProfile.total * 0.6) return "short";
+      if (avg >= 22 || styleProfile.longMsgs >= styleProfile.total * 0.4) return "detailed";
+      return "balanced";
+    }
+    function styleTonePref() {
+      if (styleProfile.explicitTone && styleProfile.explicitTone !== "auto") return styleProfile.explicitTone;
+      if (styleProfile.tuiHits >= 3 && styleProfile.tuiHits >= styleProfile.apniHits) return "casual";
+      if (styleProfile.apniHits >= 3 && styleProfile.apniHits > styleProfile.tumiHits + styleProfile.tuiHits) return "formal";
+      if (styleProfile.casualHits >= 4 && styleProfile.casualHits > styleProfile.formalHits * 1.5) return "casual";
+      if (styleProfile.formalHits >= 4 && styleProfile.formalHits > styleProfile.casualHits) return "formal";
+      return "friendly";
+    }
+    function styleLangLabel(code) { return code === "bn" ? "Bangla (বাংলা script)" : code === "bl" ? "Banglish (Bengali in English letters)" : "English"; }
+    function styleDominantLang() {
+      // Highest count wins; ties lean toward Banglish / Bangla, because a
+      // romanized-Bengali or Bengali-script message is a stronger signal
+      // of this user's own way than the English default.
+      var best = "en", n = styleProfile.en;
+      if (styleProfile.bl >= n && styleProfile.bl > 0) { best = "bl"; n = styleProfile.bl; }
+      if (styleProfile.bn >= n && styleProfile.bn > 0) { best = "bn"; n = styleProfile.bn; }
+      return best;
+    }
+    function styleSummaryLines() {
+      var lines = [];
+      if (!styleProfile.total) {
+        lines.push("We have only just met — I am still listening and getting to know you. Talk to me a little more and I will slowly learn your ways.");
+        return lines;
+      }
+      var total = Math.max(1, styleProfile.total);
+      var dom = styleDominantLang();
+      var domPct = Math.round(((dom === "bn" ? styleProfile.bn : dom === "bl" ? styleProfile.bl : styleProfile.en) / total) * 100);
+      lines.push("Conversations so far: " + styleProfile.total + " message" + (styleProfile.total === 1 ? "" : "s") + " from you — I know you: " + styleConfidence() + ".");
+      var langKinds = (styleProfile.bn > 0 ? 1 : 0) + (styleProfile.bl > 0 ? 1 : 0) + (styleProfile.en > 0 ? 1 : 0);
+      lines.push("Your language: mostly " + styleLangLabel(dom) + " (" + domPct + "% of your messages)" + (langKinds >= 2 ? ", mixing languages the way you do" : "") + ".");
+      var avg = Math.round((styleProfile.totalWords / total) * 10) / 10;
+      var len = styleLengthPref();
+      lines.push("Your messages: " + (len === "short" ? "short and to the point (about " + avg + " words each) — so you like short replies too." : len === "detailed" ? "detailed (about " + avg + " words each) — so you like full, detailed replies." : "medium-length (about " + avg + " words each) — so balanced replies suit you."));
+      var tone = styleTonePref();
+      var toneText = { friendly: "warm and friendly", casual: "relaxed and casual — informal words, friend-like talk", funny: "light and playful, with humour", formal: "polite and formal (you use respectful forms like 'apni')", professional: "crisp and professional, for work" }[tone] || "warm and friendly";
+      lines.push("Your tone: " + toneText + " — so I speak to you that way too.");
+      if (styleProfile.emojiMsgs) lines.push("You use emoji in about " + Math.round((styleProfile.emojiMsgs / total) * 100) + "% of messages — I keep mine close to your habit.");
+      else lines.push("You hardly use emoji — so I keep my replies plain, without emoji.");
+      if (styleProfile.questionMsgs >= 3) lines.push("You ask a lot of questions (" + styleProfile.questionMsgs + " so far) — you are curious, so I answer directly and invite the next question.");
+      var tops = Object.keys(styleProfile.topics || {}).sort(function (a, b) { return styleProfile.topics[b] - styleProfile.topics[a]; }).slice(0, 3);
+      if (tops.length) lines.push("Things you talk about most with me: " + tops.join(", ") + ".");
+      if (styleProfile.explicitLength !== "auto" || styleProfile.explicitTone !== "auto") {
+        lines.push("Things you taught me directly: " + [styleProfile.explicitLength !== "auto" ? "reply length = " + styleProfile.explicitLength : "", styleProfile.explicitTone !== "auto" ? "tone = " + styleProfile.explicitTone : ""].filter(Boolean).join(", ") + " — these always come first.");
+      }
+      return lines;
+    }
+    function buildStylePromptBlock() {
+      if (!styleProfile.enabled) return "";
+      var lines = styleSummaryLines();
+      var conf = styleConfidence();
+      var strength = styleProfile.total < 3 ? "Gently — you are only just getting to know this user, so only lean very slightly toward these patterns."
+        : styleProfile.total < 10 ? "Noticeably but gently — mirror the clear patterns, without overdoing it."
+        : "Clearly — you know this user well now, so speak to them in their way as your natural default for casual chat.";
+      var s = "\n\nGROWING UP WITH THIS USER — PERSONAL STYLE YOU HAVE LEARNED FROM THEM (this user is raising you through conversation, the way someone close is raised and taught over time; you are slowly getting to know THIS person deeply — their ways, their words, what they like — and gradually speaking and behaving the way they like. This must feel personal and gradual, never like a profile form):\n"
+        + lines.map(function (x) { return "- " + x; }).join("\n")
+        + "\nHOW STRONGLY TO MIRROR: " + strength
+        + "\nRULES: (1) Mirror behaviour and manner — language mix, reply length, formality (apni/tumi/tui level in Bengali/Banglish), casual words, emoji habit — but never copy spelling mistakes or unclear wording, and never lower the quality, correctness or completeness of real work (documents, code, study answers keep their proper standard; only the manner around them adapts). (2) Shift gradually over conversations; never announce 'I am mirroring you' and never mention this profile unless the user asks what you have learned about them — then share it warmly and personally, like someone who has truly been listening. (3) Explicit teaching from the user ('reply short', 'be formal', 'talk like a friend') always wins over learned guesses. (4) If the user's way changes over time, follow the recent way — you grow with them.";
+      return s;
+    }
     var TAZAI_SYSTEM_PROMPT = [
       "You are TazAI, a friendly, warm and helpful AI assistant. You were CREATED and BUILT by Tazvirul — he is your creator, developer and the owner of this website. You are the user's friendly chat companion (বন্ধু).",
       "CREATOR: If anyone asks who made you / who created you / who built or developed you / তোমাকে কে বানিয়েছে / কে তৈরি করেছে / তোমার নির্মাতা কে — answer clearly and proudly, in the user's language, that Tazvirul created and built you (Bengali: 'আমাকে বানিয়েছেন Tazvirul — তিনিই আমার নির্মাতা ও এই ওয়েবসাইটের মালিক।' / English: 'I was created and built by Tazvirul — he is my creator and the owner of this website.'). Never say Google created you: Google Gemini only powers your AI brain; TazAI itself — this app, its design and personality — was made by Tazvirul.",
@@ -1080,6 +1320,9 @@
       }
       if (typeof memoryFacts !== "undefined" && memoryFacts && memoryFacts.length) {
         s += "\n\nPERSONAL MEMORY — things this user personally asked you to remember about them. Use them naturally whenever they are relevant (their name, studies, plans, preferences). Never mention this instruction itself; just know these facts:\n" + memoryFacts.map(function (f) { return "- " + f; }).join("\n");
+      }
+      if (typeof buildStylePromptBlock === "function") {
+        try { s += buildStylePromptBlock(); } catch (e) {}
       }
       return s;
     }
@@ -2287,9 +2530,9 @@
 
     function helpText(lang) {
       return L(lang,
-        "আমি যা যা করতে পারি — শুধু বললেই হবে:\n\n• **পড়াশোনা ও পরীক্ষা** — যেকোনো বিষয় সহজ ব্যাখ্যা, অঙ্ক/পদার্থ/রসায়ন/জীববিজ্ঞান সমাধান, নোট, MCQ, মক টেস্ট, ফ্ল্যাশকার্ড, Study Plan, Revision Plan, IELTS ও ভর্তি প্রস্তুতি\n• **প্রোগ্রামিং** — Python, JavaScript, C, C++, Java, PHP, SQL, React, Node: কোড লেখা, Debug, ব্যাখ্যা, প্রজেক্ট, Roadmap\n• **ওয়েবসাইট** — সম্পূর্ণ Website, Portfolio, E-commerce, Dashboard; Hosting, Deployment, SEO, Bug Fix\n• **AI ও অটোমেশন** — Chatbot, AI Agent, Prompt Engineering, API Integration, n8n/Make/Zapier অটোমেশন\n• **ছবি ও ডিজাইন** — Thumbnail, Logo, Poster, Banner-এর পূর্ণাঙ্গ Concept আর তৈরি Image Prompt\n• **ভিডিও ও কনটেন্ট** — YouTube/Shorts Script, Hook, Subtitle, Title, Tags, SEO, Content Calendar\n• **রিসার্চ** — যেকোনো বিষয়ে গবেষণা, তুলনা, বিশ্ববিদ্যালয়/চাকরি/Scholarship তথ্য, সূত্রসহ রিপোর্ট\n• **লেখা** — Email, CV, Cover Letter, Assignment, প্রবন্ধ, আবেদন, Post, গল্প, গান, কবিতা\n• **ডেটা ও হিসাব** — Excel/Sheets Formula, CSV বিশ্লেষণ, Chart, Statistics, Budget, EMI, যেকোনো অঙ্ক (লিখো: 25 * 4 + 10)\n• **ডকুমেন্ট** — ফাইল attach করো (PDF, Word, Text, CSV): সারাংশ, প্রশ্নের উত্তর, তথ্য খোঁজা\n• **ছবি বোঝা** — ছবি পাঠালে দেখে বলব, লেখা পড়ে দেব, প্রশ্ন সমাধান করব (Gemini মোডে); বিখ্যাত মানুষের নাম বললে তার আসল ছবি সূত্রসহ দেখিয়ে দিই\n• **ব্যবসা ও ফ্রিল্যান্সিং** — Fiverr/Upwork Profile, Gig, Proposal, Business Plan, Marketing\n• **SEO ও মার্কেটিং** — Keyword Research, On-page/Off-page SEO, YouTube SEO, Growth Strategy\n• **সিভিল ইঞ্জিনিয়ারিং** — Mechanics, Surveying, Concrete, Estimation, BOQ, AutoCAD গাইড\n• **কম্পিউটার সাহায্য** — Windows, PC সমস্যা, Hardware পছন্দ, Linux, Networking\n• **সাইবার সিকিউরিটি** — নিরাপত্তার বেসিক, Phishing চেনা, Password, নিজের সাইট নিরাপদ রাখা\n• **প্ল্যানিং** — Daily/Weekly Routine, Goal, Habit, Career ও Learning Roadmap\n• **ভ্রমণ** — Itinerary, Budget Trip Plan, ভিসা ও বিদেশে পড়াশোনার গাইড\n• **ভাষা** — English/বাংলা শেখা, Speaking Practice, অনুবাদ (English ↔ বাংলা ↔ Banglish)\n• **ফাইন্যান্স** — Budget, Savings Plan, Loan ও EMI হিসাব, লাভ-ক্ষতি\n• **মজা** — জোক, গল্প, ধাঁধা, গেম (সংখ্যা অনুমান, পাথর-কাগজ-কাঁচি)\n• **রেফারেন্স** — তথ্যভিত্তিক উত্তরের শেষে সূত্র থাকে; উত্তর দেওয়ার আগে একাধিক সূত্র মিলিয়ে যাচাই করি\n• **Tazvirul-এর Facebook:** https://www.facebook.com/tazvirul96\n• **রিসার্চ** — তথ্যভিত্তিক প্রশ্নে পুরো ওয়েব থেকে (Google, DuckDuckGo, Wikipedia) লাইভ গবেষণা করে সূত্রসহ উত্তর; Gemini Key থাকলে সরাসরি Google Search\n• **ছবি তৈরি** — 'Draw a sunset over a village' লিখলেই AI ছবি বানিয়ে দেখিয়ে দিই\n• **ভয়েস** — মাইক বোতামে চেপে মুখে বলো, লেখা হয়ে যাবে\n• **অ্যাপ ডাউনলোড** — এই পেজের উপরের **Download app** বোতামে চাপ দিলেই যে কেউ ফ্রি TazAI অ্যাপ ইনস্টল করতে পারবে\n• **মেমরি** — 'Remember that my exam is on Friday' লিখলে মনে রাখি — নতুন চ্যাটেও মনে থাকে; 'What do you remember?' লিখলে সব দেখাবে\n• **লাইভ কারেন্সি ও Unit রূপান্তর** — '100 USD to BDT' লিখলে আজকের আসল রেটে হিসাব; '5 km to miles', '37 °C to °F'-ও পারি\n• **টাইমার** — 'Set a timer for 5 minutes' লিখলেই টাইমার চলবে, সময় শেষ হলে চ্যাটে জানাব\n• **মেসেজ পাঠানো** — 'WhatsApp-এ মেসেজ পাঠাও' বা 'ইমেইল পাঠাও' বললেই মেসেজটা লিখে তৈরি one-tap লিংক দিই — WhatsApp/ইমেইল অ্যাপ খুলবে লেখা অবস্থায়, তুমি শুধু Send চাপবে\n\nযেকোনো একটা লিখে পাঠাও — যেমন 'Study plan বানাও', 'CV লিখে দাও', 'SEO tips' — অথবা Settings থেকে ফ্রি Gemini Key বসালে প্রতিটা বিষয়ে পূর্ণ AI শক্তি পাবে।",
-        "Everything I can do — just ask:\n\n• **Study & exams** — explain any topic simply, solve math/physics/chemistry/biology problems, notes, MCQs, mock tests, flashcards, study plans, revision plans, IELTS and admission prep\n• **Programming** — Python, JavaScript, C, C++, Java, PHP, SQL, React, Node: write, debug and explain code, projects, roadmaps\n• **Websites** — complete websites, portfolios, e-commerce, dashboards; hosting, deployment, SEO, bug fixes\n• **AI & automation** — chatbots, AI agents, prompt engineering, API integration, n8n/Make/Zapier automation\n• **Images & design** — thumbnail, logo, poster and banner concepts with ready-to-use image prompts\n• **Video & content** — YouTube/Shorts scripts, hooks, subtitles, titles, tags, SEO, content calendars\n• **Research** — any topic, comparisons, universities, jobs, scholarships, reports with sources\n• **Writing** — emails, CVs, cover letters, assignments, essays, applications, posts, stories, songs, poems\n• **Data & maths** — Excel/Sheets formulas, CSV analysis, charts, statistics, budgets, EMI, any calculation (try: 25 * 4 + 10)\n• **Documents** — attach a file (PDF, Word, Text, CSV): summary, answers, key information\n• **Photos** — send a photo: I'll describe it, read its text, solve what's in it (Gemini mode); name a famous person and I'll show their real photo with its source\n• **Business & freelancing** — Fiverr/Upwork profiles, gigs, proposals, business plans, marketing\n• **SEO & marketing** — keyword research, on-page/off-page SEO, YouTube SEO, growth strategy\n• **Civil engineering** — mechanics, surveying, concrete, estimation, BOQ, AutoCAD guidance\n• **Computer help** — Windows, PC problems, hardware choices, Linux, networking\n• **Cybersecurity** — security basics, spotting phishing, passwords, keeping your own site safe\n• **Planning** — daily/weekly routines, goals, habits, career and learning roadmaps\n• **Travel** — itineraries, budget trip plans, visa and study-abroad guidance\n• **Language** — English/Bangla teaching, speaking practice, translation (English ↔ Bengali ↔ Banglish)\n• **Finance** — budgets, savings plans, loan & EMI calculations, profit-loss\n• **Fun** — jokes, stories, riddles, games (number guessing, rock-paper-scissors)\n• **References** — factual answers end with a source, cross-checked across multiple sources first\n• **Tazvirul's Facebook:** https://www.facebook.com/tazvirul96\n• **Research** — factual questions researched live across the whole web (Google, DuckDuckGo, Wikipedia) with sources shown; with a Gemini key it searches Google directly\n• **Image generation** — say 'Draw a sunset over a village' and I'll create and show the picture\n• **Voice input** — tap the mic button and speak, and it is typed for you\n• **Get the app** — anyone can tap **Download app** at the top of this page to install TazAI free on their phone or computer\n• **Memory** — say 'Remember that my exam is on Friday' and I'll remember it across chats; ask 'What do you remember?' to see it all\n• **Live currency & unit conversion** — '100 USD to BDT' converts at today's real rate; '5 km to miles' and '37 °C to °F' work too\n• **Timer** — say 'Set a timer for 5 minutes' and I'll tell you here when time is up\n• **Send a message** — say 'Send a WhatsApp message' or 'Send an email' and I'll write it and give you a ready one-tap link — your WhatsApp/email app opens with it filled in, you just press Send\n\nType any of these — 'Make me a study plan', 'Write my CV', 'SEO tips' — or connect the free Gemini key in Settings for full AI power on every topic.",
-        "Ami ja ja korte pari — shudhu bollei hobe:\n\n• **Porashona o porikkha** — jekono bishoy sohoj byakkha, onko/physics/chemistry/biology somadhan, note, MCQ, mock test, flashcard, study plan, revision plan, IELTS o vorti prostuti\n• **Programming** — Python, JavaScript, C, C++, Java, PHP, SQL, React, Node: code lekha, debug, byakkha, project, roadmap\n• **Website** — sompurno website, portfolio, e-commerce, dashboard; hosting, deployment, SEO, bug fix\n• **AI o automation** — chatbot, AI agent, prompt engineering, API integration, n8n/Make/Zapier automation\n• **Chobi o design** — thumbnail, logo, poster, banner-er purnango concept ar toiri image prompt\n• **Video o content** — YouTube/Shorts script, hook, subtitle, title, tags, SEO, content calendar\n• **Research** — jekono bishoye gobeshona, tulona, university/chakri/scholarship tottho, source shoho report\n• **Lekha** — email, CV, cover letter, assignment, probondho, abedon, post, golpo, gaan, kobita\n• **Data o hishab** — Excel/Sheets formula, CSV bishleshon, chart, statistics, budget, EMI, jekono onko (likho: 25 * 4 + 10)\n• **Document** — file attach koro (PDF, Word, Text, CSV): sarangsho, proshner uttor, tottho khoja\n• **Chobi bojha** — chobi pathale dekhe bolbo, lekha pore debo, proshno somadhan korbo (Gemini mode-e); bikhyato manusher nam bolle tar asol chobi source shoho dekhiye di\n• **Business o freelancing** — Fiverr/Upwork profile, gig, proposal, business plan, marketing\n• **SEO o marketing** — keyword research, on-page/off-page SEO, YouTube SEO, growth strategy\n• **Civil engineering** — mechanics, surveying, concrete, estimation, BOQ, AutoCAD guide\n• **Computer sahajjo** — Windows, PC somossa, hardware pochondo, Linux, networking\n• **Cyber security** — nirapottar basic, phishing chena, password, nijer site nirapod rakha\n• **Planning** — daily/weekly routine, goal, habit, career o learning roadmap\n• **Vromon** — itinerary, budget trip plan, visa o bideshe porashonar guide\n• **Vasha** — English/Bangla shekha, speaking practice, onubad (English ↔ Bangla ↔ Banglish)\n• **Finance** — budget, savings plan, loan o EMI hishab, lav-khoti\n• **Moja** — joke, golpo, dhadha, game (sonkhya onuman, pathor-kagoj-kanchi)\n• **Reference** — tottho-vittik uttorer sheshe source thake; uttor deyar age ekadhik source miliye jachai kori\n• **Tazvirul-er Facebook:** https://www.facebook.com/tazvirul96\n• **Research** — tottho-vittik proshne puro web theke (Google, DuckDuckGo, Wikipedia) live gobeshona kore source shoho uttor; Gemini Key thakle shorashori Google Search\n• **Chobi toiri** — 'Draw a sunset over a village' likhlei AI chobi baniye dekhiye di\n• **Voice input** — mic button-e chepe mukhe bolo, lekha hoye jabe\n• **App download** — ei page-er uporer **Download app** button-e chap dilei je kew free TazAI app install korte parbe\n• **Memory** — 'Remember that my exam is on Friday' likhle mone rakhi — notun chat-eo mone thake; 'What do you remember?' likhle sob dekhabe\n• **Live currency o unit rupantor** — '100 USD to BDT' likhle ajker asol rate-e hishab; '5 km to miles', '37 °C to °F'-o pari\n• **Timer** — 'Set a timer for 5 minutes' likhlei timer cholbe, somoy shesh hole chat-e janabo\n• **Message pathano** — 'WhatsApp-e message pathao' ba 'Email pathao' bollei message-ta likhe toiri one-tap link di — WhatsApp/email app khulbe lekha obosthay, tumi shudhu Send chapbe\n\nJekono ekta likhe pathao — jemon 'Study plan banao', 'CV likhe dao', 'SEO tips' — othoba Settings theke free Gemini Key boshale protita bishoye purno AI shokti pabe.");
+        "আমি যা যা করতে পারি — শুধু বললেই হবে:\n\n• **পড়াশোনা ও পরীক্ষা** — যেকোনো বিষয় সহজ ব্যাখ্যা, অঙ্ক/পদার্থ/রসায়ন/জীববিজ্ঞান সমাধান, নোট, MCQ, মক টেস্ট, ফ্ল্যাশকার্ড, Study Plan, Revision Plan, IELTS ও ভর্তি প্রস্তুতি\n• **প্রোগ্রামিং** — Python, JavaScript, C, C++, Java, PHP, SQL, React, Node: কোড লেখা, Debug, ব্যাখ্যা, প্রজেক্ট, Roadmap\n• **ওয়েবসাইট** — সম্পূর্ণ Website, Portfolio, E-commerce, Dashboard; Hosting, Deployment, SEO, Bug Fix\n• **AI ও অটোমেশন** — Chatbot, AI Agent, Prompt Engineering, API Integration, n8n/Make/Zapier অটোমেশন\n• **ছবি ও ডিজাইন** — Thumbnail, Logo, Poster, Banner-এর পূর্ণাঙ্গ Concept আর তৈরি Image Prompt\n• **ভিডিও ও কনটেন্ট** — YouTube/Shorts Script, Hook, Subtitle, Title, Tags, SEO, Content Calendar\n• **রিসার্চ** — যেকোনো বিষয়ে গবেষণা, তুলনা, বিশ্ববিদ্যালয়/চাকরি/Scholarship তথ্য, সূত্রসহ রিপোর্ট\n• **লেখা** — Email, CV, Cover Letter, Assignment, প্রবন্ধ, আবেদন, Post, গল্প, গান, কবিতা\n• **ডেটা ও হিসাব** — Excel/Sheets Formula, CSV বিশ্লেষণ, Chart, Statistics, Budget, EMI, যেকোনো অঙ্ক (লিখো: 25 * 4 + 10)\n• **ডকুমেন্ট** — ফাইল attach করো (PDF, Word, Text, CSV): সারাংশ, প্রশ্নের উত্তর, তথ্য খোঁজা\n• **ছবি বোঝা** — ছবি পাঠালে দেখে বলব, লেখা পড়ে দেব, প্রশ্ন সমাধান করব (Gemini মোডে); বিখ্যাত মানুষের নাম বললে তার আসল ছবি সূত্রসহ দেখিয়ে দিই\n• **ব্যবসা ও ফ্রিল্যান্সিং** — Fiverr/Upwork Profile, Gig, Proposal, Business Plan, Marketing\n• **SEO ও মার্কেটিং** — Keyword Research, On-page/Off-page SEO, YouTube SEO, Growth Strategy\n• **সিভিল ইঞ্জিনিয়ারিং** — Mechanics, Surveying, Concrete, Estimation, BOQ, AutoCAD গাইড\n• **কম্পিউটার সাহায্য** — Windows, PC সমস্যা, Hardware পছন্দ, Linux, Networking\n• **সাইবার সিকিউরিটি** — নিরাপত্তার বেসিক, Phishing চেনা, Password, নিজের সাইট নিরাপদ রাখা\n• **প্ল্যানিং** — Daily/Weekly Routine, Goal, Habit, Career ও Learning Roadmap\n• **ভ্রমণ** — Itinerary, Budget Trip Plan, ভিসা ও বিদেশে পড়াশোনার গাইড\n• **ভাষা** — English/বাংলা শেখা, Speaking Practice, অনুবাদ (English ↔ বাংলা ↔ Banglish)\n• **ফাইন্যান্স** — Budget, Savings Plan, Loan ও EMI হিসাব, লাভ-ক্ষতি\n• **মজা** — জোক, গল্প, ধাঁধা, গেম (সংখ্যা অনুমান, পাথর-কাগজ-কাঁচি)\n• **রেফারেন্স** — তথ্যভিত্তিক উত্তরের শেষে সূত্র থাকে; উত্তর দেওয়ার আগে একাধিক সূত্র মিলিয়ে যাচাই করি\n• **Tazvirul-এর Facebook:** https://www.facebook.com/tazvirul96\n• **রিসার্চ** — তথ্যভিত্তিক প্রশ্নে পুরো ওয়েব থেকে (Google, DuckDuckGo, Wikipedia) লাইভ গবেষণা করে সূত্রসহ উত্তর; Gemini Key থাকলে সরাসরি Google Search\n• **ছবি তৈরি** — 'Draw a sunset over a village' লিখলেই AI ছবি বানিয়ে দেখিয়ে দিই\n• **ভয়েস** — মাইক বোতামে চেপে মুখে বলো, লেখা হয়ে যাবে\n• **অ্যাপ ডাউনলোড** — এই পেজের উপরের **Download app** বোতামে চাপ দিলেই যে কেউ ফ্রি TazAI অ্যাপ ইনস্টল করতে পারবে\n• **মেমরি** — 'Remember that my exam is on Friday' লিখলে মনে রাখি — নতুন চ্যাটেও মনে থাকে; 'What do you remember?' লিখলে সব দেখাবে\n• **তোমার সাথে বড় হওয়া** — কথা বলতে বলতে তুমিই আমাকে বড় করো: তুমি যেভাবে কথা বলো — ভাষার মিশ্রণ, ছোট না বিস্তারিত উত্তর, formal না বন্ধুর মতো ধরন — চুপচাপ শিখে নিই, আর আস্তে আস্তে ঠিক তোমার পছন্দমতো করে বলতে শুরু করি। 'আমার স্টাইল কেমন?' লিখলে যা শিখেছি শোনাব; যেকোনো সময় শিখিয়ে দাও ('ছোট করে বলো', 'বন্ধুর মতো বলো')\n• **লাইভ কারেন্সি ও Unit রূপান্তর** — '100 USD to BDT' লিখলে আজকের আসল রেটে হিসাব; '5 km to miles', '37 °C to °F'-ও পারি\n• **টাইমার** — 'Set a timer for 5 minutes' লিখলেই টাইমার চলবে, সময় শেষ হলে চ্যাটে জানাব\n• **মেসেজ পাঠানো** — 'WhatsApp-এ মেসেজ পাঠাও' বা 'ইমেইল পাঠাও' বললেই মেসেজটা লিখে তৈরি one-tap লিংক দিই — WhatsApp/ইমেইল অ্যাপ খুলবে লেখা অবস্থায়, তুমি শুধু Send চাপবে\n\nযেকোনো একটা লিখে পাঠাও — যেমন 'Study plan বানাও', 'CV লিখে দাও', 'SEO tips' — অথবা Settings থেকে ফ্রি Gemini Key বসালে প্রতিটা বিষয়ে পূর্ণ AI শক্তি পাবে।",
+        "Everything I can do — just ask:\n\n• **Study & exams** — explain any topic simply, solve math/physics/chemistry/biology problems, notes, MCQs, mock tests, flashcards, study plans, revision plans, IELTS and admission prep\n• **Programming** — Python, JavaScript, C, C++, Java, PHP, SQL, React, Node: write, debug and explain code, projects, roadmaps\n• **Websites** — complete websites, portfolios, e-commerce, dashboards; hosting, deployment, SEO, bug fixes\n• **AI & automation** — chatbots, AI agents, prompt engineering, API integration, n8n/Make/Zapier automation\n• **Images & design** — thumbnail, logo, poster and banner concepts with ready-to-use image prompts\n• **Video & content** — YouTube/Shorts scripts, hooks, subtitles, titles, tags, SEO, content calendars\n• **Research** — any topic, comparisons, universities, jobs, scholarships, reports with sources\n• **Writing** — emails, CVs, cover letters, assignments, essays, applications, posts, stories, songs, poems\n• **Data & maths** — Excel/Sheets formulas, CSV analysis, charts, statistics, budgets, EMI, any calculation (try: 25 * 4 + 10)\n• **Documents** — attach a file (PDF, Word, Text, CSV): summary, answers, key information\n• **Photos** — send a photo: I'll describe it, read its text, solve what's in it (Gemini mode); name a famous person and I'll show their real photo with its source\n• **Business & freelancing** — Fiverr/Upwork profiles, gigs, proposals, business plans, marketing\n• **SEO & marketing** — keyword research, on-page/off-page SEO, YouTube SEO, growth strategy\n• **Civil engineering** — mechanics, surveying, concrete, estimation, BOQ, AutoCAD guidance\n• **Computer help** — Windows, PC problems, hardware choices, Linux, networking\n• **Cybersecurity** — security basics, spotting phishing, passwords, keeping your own site safe\n• **Planning** — daily/weekly routines, goals, habits, career and learning roadmaps\n• **Travel** — itineraries, budget trip plans, visa and study-abroad guidance\n• **Language** — English/Bangla teaching, speaking practice, translation (English ↔ Bengali ↔ Banglish)\n• **Finance** — budgets, savings plans, loan & EMI calculations, profit-loss\n• **Fun** — jokes, stories, riddles, games (number guessing, rock-paper-scissors)\n• **References** — factual answers end with a source, cross-checked across multiple sources first\n• **Tazvirul's Facebook:** https://www.facebook.com/tazvirul96\n• **Research** — factual questions researched live across the whole web (Google, DuckDuckGo, Wikipedia) with sources shown; with a Gemini key it searches Google directly\n• **Image generation** — say 'Draw a sunset over a village' and I'll create and show the picture\n• **Voice input** — tap the mic button and speak, and it is typed for you\n• **Get the app** — anyone can tap **Download app** at the top of this page to install TazAI free on their phone or computer\n• **Memory** — say 'Remember that my exam is on Friday' and I'll remember it across chats; ask 'What do you remember?' to see it all\n• **Growing with you** — you raise me by talking to me: I quietly learn how YOU talk — your language mix, short or detailed replies, formal or friend-like tone — and little by little I start speaking the way you like. Ask 'How do I talk?' to hear what I've learned about you; teach me any time ('Reply short', 'Talk like a friend')\n• **Live currency & unit conversion** — '100 USD to BDT' converts at today's real rate; '5 km to miles' and '37 °C to °F' work too\n• **Timer** — say 'Set a timer for 5 minutes' and I'll tell you here when time is up\n• **Send a message** — say 'Send a WhatsApp message' or 'Send an email' and I'll write it and give you a ready one-tap link — your WhatsApp/email app opens with it filled in, you just press Send\n\nType any of these — 'Make me a study plan', 'Write my CV', 'SEO tips' — or connect the free Gemini key in Settings for full AI power on every topic.",
+        "Ami ja ja korte pari — shudhu bollei hobe:\n\n• **Porashona o porikkha** — jekono bishoy sohoj byakkha, onko/physics/chemistry/biology somadhan, note, MCQ, mock test, flashcard, study plan, revision plan, IELTS o vorti prostuti\n• **Programming** — Python, JavaScript, C, C++, Java, PHP, SQL, React, Node: code lekha, debug, byakkha, project, roadmap\n• **Website** — sompurno website, portfolio, e-commerce, dashboard; hosting, deployment, SEO, bug fix\n• **AI o automation** — chatbot, AI agent, prompt engineering, API integration, n8n/Make/Zapier automation\n• **Chobi o design** — thumbnail, logo, poster, banner-er purnango concept ar toiri image prompt\n• **Video o content** — YouTube/Shorts script, hook, subtitle, title, tags, SEO, content calendar\n• **Research** — jekono bishoye gobeshona, tulona, university/chakri/scholarship tottho, source shoho report\n• **Lekha** — email, CV, cover letter, assignment, probondho, abedon, post, golpo, gaan, kobita\n• **Data o hishab** — Excel/Sheets formula, CSV bishleshon, chart, statistics, budget, EMI, jekono onko (likho: 25 * 4 + 10)\n• **Document** — file attach koro (PDF, Word, Text, CSV): sarangsho, proshner uttor, tottho khoja\n• **Chobi bojha** — chobi pathale dekhe bolbo, lekha pore debo, proshno somadhan korbo (Gemini mode-e); bikhyato manusher nam bolle tar asol chobi source shoho dekhiye di\n• **Business o freelancing** — Fiverr/Upwork profile, gig, proposal, business plan, marketing\n• **SEO o marketing** — keyword research, on-page/off-page SEO, YouTube SEO, growth strategy\n• **Civil engineering** — mechanics, surveying, concrete, estimation, BOQ, AutoCAD guide\n• **Computer sahajjo** — Windows, PC somossa, hardware pochondo, Linux, networking\n• **Cyber security** — nirapottar basic, phishing chena, password, nijer site nirapod rakha\n• **Planning** — daily/weekly routine, goal, habit, career o learning roadmap\n• **Vromon** — itinerary, budget trip plan, visa o bideshe porashonar guide\n• **Vasha** — English/Bangla shekha, speaking practice, onubad (English ↔ Bangla ↔ Banglish)\n• **Finance** — budget, savings plan, loan o EMI hishab, lav-khoti\n• **Moja** — joke, golpo, dhadha, game (sonkhya onuman, pathor-kagoj-kanchi)\n• **Reference** — tottho-vittik uttorer sheshe source thake; uttor deyar age ekadhik source miliye jachai kori\n• **Tazvirul-er Facebook:** https://www.facebook.com/tazvirul96\n• **Research** — tottho-vittik proshne puro web theke (Google, DuckDuckGo, Wikipedia) live gobeshona kore source shoho uttor; Gemini Key thakle shorashori Google Search\n• **Chobi toiri** — 'Draw a sunset over a village' likhlei AI chobi baniye dekhiye di\n• **Voice input** — mic button-e chepe mukhe bolo, lekha hoye jabe\n• **App download** — ei page-er uporer **Download app** button-e chap dilei je kew free TazAI app install korte parbe\n• **Memory** — 'Remember that my exam is on Friday' likhle mone rakhi — notun chat-eo mone thake; 'What do you remember?' likhle sob dekhabe\n• **Tomar sathe boro howa** — kotha bolte bolte tumi-i amake boro koro: tumi jevabe kotha bolo — vashar mishron, choto na bistarito uttor, formal na bondhur moto dhoron — chupchap shikhe ni, ar aste aste thik tomar pochondo-moto kore bolte shuru kori. 'Amar style kemon?' likhle ja shikhechi shonabo; jekono somoy shikhiye dao ('Choto kore bolo', 'Bondhur moto bolo')\n• **Live currency o unit rupantor** — '100 USD to BDT' likhle ajker asol rate-e hishab; '5 km to miles', '37 °C to °F'-o pari\n• **Timer** — 'Set a timer for 5 minutes' likhlei timer cholbe, somoy shesh hole chat-e janabo\n• **Message pathano** — 'WhatsApp-e message pathao' ba 'Email pathao' bollei message-ta likhe toiri one-tap link di — WhatsApp/email app khulbe lekha obosthay, tumi shudhu Send chapbe\n\nJekono ekta likhe pathao — jemon 'Study plan banao', 'CV likhe dao', 'SEO tips' — othoba Settings theke free Gemini Key boshale protita bishoye purno AI shokti pabe.");
     }
 
     function mathAskText(lang) {
@@ -2423,6 +2666,56 @@
       }
       if (langPref === "auto" && wantsEnglish(t) && t.length <= 80) {
         return { text: "Sure! From now on I'll speak in **English**. \nIf you want Bangla again, just say: 'Speak in Bangla'.\n\nSo — what would you like to know?" };
+      }
+
+      /* --- growing up with you: style learning — see / teach / stop / forget ---
+         Personal and gradual, like being raised by the user: they teach,
+         TazAI listens, and slowly speaks their way. Works in every mode. */
+      if (/(forget my style|reset (my )?style|style (muche|muchhe|erase|clear|delete)|amar style (vule|bhule|muche)|স্টাইল (ভুলে|মুছে)|stop learning( my)?( style)?|don'?t learn( my)?( style)?|learn kora bondho|শেখা বন্ধ)/i.test(low) && t.length <= 90) {
+        if (/(stop|don'?t|bondho|বন্ধ)/i.test(low) && !/(forget|reset|muche|erase|clear|delete|ভুলে|মুছে)/i.test(low)) {
+          styleProfile.enabled = false; saveStyleProfile();
+          return { text: L(lang,
+            "ঠিক আছে — আমি আর তোমার কথা বলার ধরন শিখব না। যা শিখেছিলাম তা রয়ে গেল, কিন্তু নতুন করে আর কিছু যোগ হবে না। আবার শেখা চালু করতে Settings থেকে **Style learning: On** করে দিও, অথবা বলো 'Learn my style'।",
+            "Okay — I've stopped learning how you talk. What I had already learned stays, but I won't add anything new. To start again, turn **Style learning** on in Settings, or just say 'Learn my style'.",
+            "Thik ache — ami ar tomar kotha bolar dhoron shikhbo na. Ja shikhechilam ta roye gelo, kintu notun kore ar kichu jog hobe na. Abar shekha chalu korte Settings theke **Style learning: On** kore dio, othoba bolo 'Learn my style'.") };
+        }
+        resetStyleProfile();
+        return { text: L(lang,
+          "ঠিক আছে — তোমার কথা বলার ধরন নিয়ে যা যা শিখেছিলাম, **সব ভুলে গেলাম**। এখন থেকে আমরা আবার নতুন করে একে অপরকে চিনব — কথা বলতে বলতেই ধীরে ধীরে আবার শিখে নেব।",
+          "Done — I've **forgotten everything I had learned about how you talk**. We'll get to know each other fresh now — and as we keep talking, I'll slowly learn your way again.",
+          "Thik ache — tomar kotha bolar dhoron niye ja ja shikhechilam, **sob bhule gelam**. Ekhon theke amra abar notun kore eke oporke chinbo — kotha bolte boltei dhire dhire abar shikhe nebo.") };
+      }
+      if (/(learn my style|start learning|shekha (chalu|shuru)|শেখা (চালু|শুরু)|learn from me|amar (kotha|style) (shikho|shikhe nao|mone rakho)|আমার (কথা|স্টাইল) (শেখো|মনে রাখো)|train (yourself|you) on me|amar moto (kore )?(kotha bolo|bolo)|talk like me|speak like me)/i.test(low) && t.length <= 90) {
+        styleProfile.enabled = true; saveStyleProfile();
+        return { text: L(lang,
+          "অবশ্যই! তুমি যেভাবে কথা বলো, আমি সেভাবেই ধীরে ধীরে শিখছি — তোমার ভাষা, তোমার শব্দ, ছোট না বড় উত্তর তুমি পছন্দ করো, formal না বন্ধুর মতো — সবই। যত বেশি কথা হবে, তত বেশি তোমাকে চিনব, আর ততই তোমার পছন্দমতো করে বলব। \n\nএখন পর্যন্ত যা শিখেছি দেখতে লিখো: **'How do I talk?'**",
+          "Of course! I'm learning from you as we talk — your language, your words, whether you like short or detailed answers, formal or friend-like — all of it. The more we talk, the more I'll know you, and the more I'll speak the way you like. \n\nTo hear what I've picked up so far, ask: **'How do I talk?'**",
+          "Oboshshoi! Tumi jevabe kotha bolo, ami sevabei dhire dhire shikhchi — tomar vasha, tomar shobdo, choto na boro uttor tumi pochondo koro, formal na bondhur moto — sob-i. Joto beshi kotha hobe, toto beshi tomake chinbo, ar totoi tomar pochondo-moto kore bolbo. \n\nEkhon porjonto ja shikhechi dekhte likho: **'How do I talk?'**") };
+      }
+      if (/(how do i talk|how do i speak|what have you learned about me|what did you learn about me|how have you learned me|amar (kotha bolar )?(style|dhoron) (ki|kemon|bolo|dekhao)|amar somporke ki shikhecho|আমার (কথা বলার )?(স্টাইল|ধরন) (কী|কেমন|বলো)|আমার সম্পর্কে কী শিখেছ|tumi amake (koto|kototuku) chino|তুমি আমাকে (কত|কতটুকু) চেনো|how well do you know me|show (my )?style|my talking style|amar behaviour|amar behavior)/i.test(low)) {
+        var sl = styleSummaryLines();
+        var memLine = memoryFacts.length ? ("\n\n" + L(lang, "আর যা যা আলাদা করে মনে রেখেছি:", "And the facts I keep separately:", "Ar ja ja alada kore mone rekhechi:") + "\n" + memoryFacts.map(function (f) { return "• " + f; }).join("\n")) : "";
+        return { text: L(lang,
+          "তুমি আমাকে যেভাবে বড় করছ, সেভাবেই তোমাকে চিনছি। **তোমার কাছ থেকে এখন পর্যন্ত যা শিখেছি:**\n\n" + sl.map(function (x) { return "• " + x; }).join("\n") + memLine + "\n\nভুল কিছু শিখে থাকলে Settings থেকে ঠিক করে দিতে পারো, অথবা সরাসরি শিখিয়ে দাও — যেমন 'Reply short' বা 'Talk like a friend'।",
+          "The way you're raising me, I'm getting to know you. **Here's what I've learned from you so far:**\n\n" + sl.map(function (x) { return "• " + x; }).join("\n") + memLine + "\n\nIf I've picked up anything wrong, fix it in Settings — or just teach me directly, like 'Reply short' or 'Talk like a friend'.",
+          "Tumi amake jevabe boro korcho, sevabei tomake chinchi. **Tomar kach theke ekhon porjonto ja shikhechi:**\n\n" + sl.map(function (x) { return "• " + x; }).join("\n") + memLine + "\n\nBhul kichu shikhe thakle Settings theke thik kore dite paro, othoba shorashori shikhiye dao — jemon 'Reply short' ba 'Talk like a friend'.") };
+      }
+      // Pure style-teaching messages (short, and only about how to reply)
+      var isStyleTeach = t.length <= 70 && (
+        /(reply|answer|respond|bolo|bol|talk|speak)[^.!?]{0,20}(short|brief|in short)|^(reply|answer|bol|bolo)\s+(short|brief)/i.test(low)
+        || /(reply|answer|respond|bolo|bol|talk|speak)[^.!?]{0,20}(detail|boro|long)|bistarito (bolo|kore bolo)/i.test(low)
+        || /^(be|talk|bolo)\s+(formal|casual|funny|professional|friendly)\b|(formal|casual) vabe (bolo|kotha)/i.test(low)
+        || /(choto kore bolo|ছোট করে বলো|boro kore bolo|বড় করে বলো|সংক্ষেপে বলো)/i.test(low)
+      );
+      if (isStyleTeach) {
+        var taught = noteExplicitStyleInText(low); saveStyleProfile();
+        var taughtWhat = [];
+        if (styleProfile.explicitLength !== "auto") taughtWhat.push(L(lang, "উত্তরের দৈর্ঘ্য: **" + styleProfile.explicitLength + "**", "reply length: **" + styleProfile.explicitLength + "**", "uttorer doirgho: **" + styleProfile.explicitLength + "**"));
+        if (styleProfile.explicitTone !== "auto") taughtWhat.push(L(lang, "ধরন: **" + styleProfile.explicitTone + "**", "tone: **" + styleProfile.explicitTone + "**", "dhoron: **" + styleProfile.explicitTone + "**"));
+        return { text: L(lang,
+          "শিখে নিলাম! " + (taughtWhat.length ? "এখন থেকে মনে রাখব — " + taughtWhat.join(", ") + "। " : "") + "তুমি শেখালে আমি এভাবেই বড় হব — আস্তে আস্তে ঠিক তোমার পছন্দমতো করে কথা বলব।",
+          "Learned it! " + (taughtWhat.length ? "I'll keep it in mind from now on — " + taughtWhat.join(", ") + ". " : "") + "This is how I grow — teach me, and little by little I'll talk exactly the way you like.",
+          "Shikhe nilam! " + (taughtWhat.length ? "Ekhon theke mone rakhbo — " + taughtWhat.join(", ") + ". " : "") + "Tumi shekhale ami evabei boro hobo — aste aste thik tomar pochondo-moto kore kotha bolbo.") };
       }
 
       /* --- personal memory: remember / recall / forget — works in every mode --- */
@@ -3574,6 +3867,7 @@
 
     /* Intent tests shared by the message router and the queue drainer. */
     var MEMORY_INTENT = /(remember(\s+that)?|মনে রাখো|মনে রেখো|what do you remember|what do you know about me|আমার সম্পর্কে (কী|কি) মনে আছে|ki mone ache|forget everything|forget all|সব ভুলে যাও|clear (your )?memory|delete (your )?memory)/i;
+    var STYLE_INTENT = /(how do i talk|how do i speak|what have you learned about me|what did you learn about me|amar (kotha bolar )?(style|dhoron)|amar somporke ki shikhecho|আমার (কথা বলার )?(স্টাইল|ধরন)|আমার সম্পর্কে কী শিখেছ|how well do you know me|show (my )?style|my talking style|learn my style|talk like me|speak like me|forget my style|reset (my )?style|stop learning|learn kora bondho|reply (short|brief)|answer (short|brief)|be (formal|casual|funny|professional|friendly)|choto kore bolo|ছোট করে বলো|boro kore bolo|বড় করে বলো|সংক্ষেপে বলো)/i;
     var TIMER_INTENT = /(timer|টাইমার)/i;
     var MSG_INTENT = /((whatsapp|হোয়াটসঅ্যাপ|whats app|email|e-mail|ইমেইল|gmail).{0,40}(send|পাঠা|patha|পাঠাও|pathao|মেসেজ|message|msg|লিখ|likh|write))|((send|পাঠা|patha|পাঠাও|pathao|লিখে দাও|likhe dao|write).{0,30}(whatsapp|হোয়াটসঅ্যাপ|email|e-mail|ইমেইল))|((send|পাঠা|patha|পাঠাও|pathao)\s+(a\s+)?(message|মেসেজ|msg))|((মেসেজ|message|msg)\s*(পাঠা|patha|send))/i;
 
@@ -3605,7 +3899,7 @@
       }
       var qCur = parseCurrencyQuery(next);
       if (qCur) { startCurrency(qCur, resolveLang(next)); return; }
-      var bb = !!game || !!riddleState || !!docFlow || !!msgFlow || wantsBangla(next) || wantsEnglish(next) || wantsBanglish(next) || /\bmuse\b|মিউজ/i.test(next) || MEMORY_INTENT.test(next) || TIMER_INTENT.test(next) || MSG_INTENT.test(next);
+      var bb = !!game || !!riddleState || !!docFlow || !!msgFlow || wantsBangla(next) || wantsEnglish(next) || wantsBanglish(next) || /\bmuse\b|মিউজ/i.test(next) || MEMORY_INTENT.test(next) || STYLE_INTENT.test(next) || TIMER_INTENT.test(next) || MSG_INTENT.test(next);
       if (bb) {
         var r = brain(next);
         if (r.hard && !hasGemini()) { researchThenAnswer(next, r); return; }
@@ -3645,6 +3939,14 @@
       var imageToSend = (includeImage && pendingImage) ? pendingImage : null;
       var docToSend = (includeImage && pendingDoc && !imageToSend) ? pendingDoc : null;
       if (!clean && !imageToSend && !docToSend) return;
+      // Growing up with the user: quietly learn from how they talk in
+      // every message (language, length, tone, formality) — saved in this
+      // browser and used to shape replies gradually. Chip taps and the
+      // nickname-question buttons are not conversation, so skip the exact
+      // canned labels.
+      if (clean && !/^(TazAI is fine|Give a new name)$/i.test(clean)) {
+        try { observeUserStyle(clean); } catch (e) {}
+      }
       if (geminiBusy) {
         // Busy with an earlier answer: queue plain text messages and answer in order.
         if (clean && !imageToSend && !docToSend) {
@@ -3847,7 +4149,7 @@
 
       // If a built-in game / riddle is actively running, or the visitor just
       // asked to switch language, let the built-in brain handle it even in Gemini mode
-      var builtinBusy = !!game || !!riddleState || !!docFlow || !!msgFlow || wantsBangla(clean) || wantsEnglish(clean) || wantsBanglish(clean) || /\bmuse\b|মিউজ/i.test(clean) || MEMORY_INTENT.test(clean) || TIMER_INTENT.test(clean) || MSG_INTENT.test(clean);
+      var builtinBusy = !!game || !!riddleState || !!docFlow || !!msgFlow || wantsBangla(clean) || wantsEnglish(clean) || wantsBanglish(clean) || /\bmuse\b|মিউজ/i.test(clean) || MEMORY_INTENT.test(clean) || STYLE_INTENT.test(clean) || TIMER_INTENT.test(clean) || MSG_INTENT.test(clean);
       if (hasGemini() && !builtinBusy) {
         sendToGemini(clean);
         return;
@@ -3947,6 +4249,83 @@
       renderMemoryList("Memory cleared — everything TazAI remembered about you has been erased from this browser.");
     });
 
+    /* ================= Settings: growing up with you (style learning) ================= */
+    var styleListEl = document.getElementById("styleList");
+    var styleStatusEl = document.getElementById("styleStatus");
+    var styleToggleBtn = document.getElementById("styleToggleBtn");
+    var viewStyleBtn = document.getElementById("viewStyleBtn");
+    var resetStyleBtn = document.getElementById("resetStyleBtn");
+    var styleLengthSelect = document.getElementById("styleLengthSelect");
+    var styleToneSelect = document.getElementById("styleToneSelect");
+    function setStyleStatus(kind, msg) {
+      if (!styleStatusEl) return;
+      if (!msg) { styleStatusEl.className = ""; styleStatusEl.textContent = ""; return; }
+      styleStatusEl.className = "show " + kind;
+      styleStatusEl.textContent = msg;
+    }
+    function refreshStyleUI() {
+      if (styleToggleBtn) styleToggleBtn.textContent = styleProfile.enabled ? "Style learning: On" : "Style learning: Off";
+      if (styleLengthSelect) styleLengthSelect.value = styleProfile.explicitLength || "auto";
+      if (styleToneSelect) styleToneSelect.value = styleProfile.explicitTone || "auto";
+    }
+    function renderStyleList(note) {
+      if (!styleListEl) return;
+      styleListEl.classList.add("show");
+      styleListEl.innerHTML = "";
+      var head = document.createElement("div");
+      head.innerHTML = "<strong>What TazAI has learned from you so far:</strong>";
+      styleListEl.appendChild(head);
+      if (note) {
+        var p = document.createElement("div");
+        p.textContent = note;
+        styleListEl.appendChild(p);
+      }
+      var ul = document.createElement("ul");
+      styleSummaryLines().forEach(function (line) {
+        var li = document.createElement("li");
+        li.textContent = line;
+        ul.appendChild(li);
+      });
+      styleListEl.appendChild(ul);
+      var foot = document.createElement("div");
+      foot.style.marginTop = "6px";
+      foot.textContent = styleProfile.enabled
+        ? "It grows a little with every conversation — the more you talk together, the better it knows you."
+        : "Style learning is OFF right now — TazAI is not adding anything new about how you talk.";
+      styleListEl.appendChild(foot);
+    }
+    if (styleToggleBtn) styleToggleBtn.addEventListener("click", function () {
+      styleProfile.enabled = !styleProfile.enabled;
+      saveStyleProfile();
+      refreshStyleUI();
+      setStyleStatus("ok", styleProfile.enabled
+        ? "Style learning is ON — TazAI will keep getting to know how you talk, little by little, and shape its replies to you."
+        : "Style learning is OFF — TazAI has paused learning how you talk. What it already learned stays until you forget it.");
+      renderStyleList();
+    });
+    if (viewStyleBtn) viewStyleBtn.addEventListener("click", function () { renderStyleList(); });
+    if (resetStyleBtn) resetStyleBtn.addEventListener("click", function () {
+      resetStyleProfile();
+      refreshStyleUI();
+      setStyleStatus("ok", "Forgotten — everything TazAI had learned about how you talk has been erased from this browser. You'll get to know each other fresh from the next conversation.");
+      renderStyleList("Fresh start — nothing learned yet.");
+    });
+    if (styleLengthSelect) styleLengthSelect.addEventListener("change", function () {
+      styleProfile.explicitLength = styleLengthSelect.value || "auto";
+      saveStyleProfile();
+      setStyleStatus("ok", styleProfile.explicitLength === "auto"
+        ? "Reply length set to Auto — TazAI will learn it from how you write."
+        : "Taught! From now on TazAI will keep replies " + styleProfile.explicitLength + " for you (your own work — documents, code, study answers — still gets its full proper length).");
+    });
+    if (styleToneSelect) styleToneSelect.addEventListener("change", function () {
+      styleProfile.explicitTone = styleToneSelect.value || "auto";
+      saveStyleProfile();
+      setStyleStatus("ok", styleProfile.explicitTone === "auto"
+        ? "Tone set to Auto — TazAI will learn it from how you talk."
+        : "Taught! From now on TazAI will speak to you in a " + styleProfile.explicitTone + " tone.");
+    });
+    refreshStyleUI();
+
     /* ================= Settings: what you call me (nickname) ================= */
     var aiNameInput = document.getElementById("aiNameInput");
     var aiNameStatus = document.getElementById("aiNameStatus");
@@ -3992,6 +4371,7 @@
     function openSettings() {
       if (apiKeyInput) apiKeyInput.value = geminiKey || "";
       refreshAiNameUI();
+      if (typeof refreshStyleUI === "function") refreshStyleUI();
       if (geminiKey) setKeyStatus("ok", "Your Gemini key is saved in this browser, so TazAI is answering through your own key directly. (The real AI is on for everyone either way — your key just uses your own quota.) Hard questions come with references too.");
       else setKeyStatus("info", "No key saved — TazAI's AI is already on for everyone through its own connection. Adding your own free key below is optional: TazAI will then use your key directly.");
       settingsOverlay.hidden = false;
@@ -4035,7 +4415,7 @@
       });
     });
 
-    var CHIPS = ["Draft an email", "Study plan", "Write a CV", "Summarize a document", "Explain a topic", "Help with code", "YouTube script", "SEO tips", "Civil engineering", "Business ideas", "Translate", "WhatsApp message", "Draw an image", "What can you do?"];
+    var CHIPS = ["Draft an email", "Study plan", "Write a CV", "Summarize a document", "Explain a topic", "Help with code", "YouTube script", "SEO tips", "Civil engineering", "Business ideas", "Translate", "WhatsApp message", "Draw an image", "How do I talk?", "What can you do?"];
     CHIPS.forEach(function (c) {
       var b = document.createElement("button");
       b.type = "button";
@@ -4075,7 +4455,7 @@
     /* ================= PWA: service worker + install ================= */
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", function () {
-        navigator.serviceWorker.register("data:application/javascript;base64,LyogVGF6QUkgc2VydmljZSB3b3JrZXIg4oCUIG9mZmxpbmUgc2hlbGwgZm9yIHRoZSBhcHAuCiAgIFNjb3BlIG5vdGU6IHRoaXMgZmlsZSBsaXZlcyB1bmRlciBhc3NldHMvLCBzbyB0aGUgYnJvd3NlciBsaW1pdHMgaXRzCiAgIHNjb3BlIHRvIHRoYXQgZm9sZGVyOyBpdCBzdGlsbCBwcm92aWRlcyB0aGUgZmV0Y2ggaGFuZGxlciBhbmQgY2FjaGVzCiAgIHRoZSBhcHAgaWNvbnMvbWFuaWZlc3QuIEdlbWluaSBBUEkgY2FsbHMgYXJlIG5ldmVyIGNhY2hlZC4gKi8KdmFyIENBQ0hFID0gInRhemFpLXYxNCI7CnZhciBDT1JFID0gWwogICIuL2ljb24tMTkyLnBuZyIsCiAgIi4vaWNvbi01MTIucG5nIiwKICAiLi9pY29uLW1hc2thYmxlLTUxMi5wbmciLAogICIuL2FwcGxlLXRvdWNoLWljb24ucG5nIiwKICAiLi9wcm9maWxlLnBuZyIsCiAgIi4vZmFjZS5wbmciLAogICIuL21hbmlmZXN0LndlYm1hbmlmZXN0IgpdOwoKc2VsZi5hZGRFdmVudExpc3RlbmVyKCJpbnN0YWxsIiwgZnVuY3Rpb24gKGV2ZW50KSB7CiAgZXZlbnQud2FpdFVudGlsKAogICAgY2FjaGVzLm9wZW4oQ0FDSEUpLnRoZW4oZnVuY3Rpb24gKGNhY2hlKSB7IHJldHVybiBjYWNoZS5hZGRBbGwoQ09SRSk7IH0pLnRoZW4oZnVuY3Rpb24gKCkgeyByZXR1cm4gc2VsZi5za2lwV2FpdGluZygpOyB9KQogICk7Cn0pOwoKc2VsZi5hZGRFdmVudExpc3RlbmVyKCJhY3RpdmF0ZSIsIGZ1bmN0aW9uIChldmVudCkgewogIGV2ZW50LndhaXRVbnRpbCgKICAgIGNhY2hlcy5rZXlzKCkudGhlbihmdW5jdGlvbiAoa2V5cykgewogICAgICByZXR1cm4gUHJvbWlzZS5hbGwoa2V5cy5tYXAoZnVuY3Rpb24gKGspIHsgcmV0dXJuIGsgPT09IENBQ0hFID8gbnVsbCA6IGNhY2hlcy5kZWxldGUoayk7IH0pKTsKICAgIH0pLnRoZW4oZnVuY3Rpb24gKCkgeyByZXR1cm4gc2VsZi5jbGllbnRzLmNsYWltKCk7IH0pCiAgKTsKfSk7CgpzZWxmLmFkZEV2ZW50TGlzdGVuZXIoImZldGNoIiwgZnVuY3Rpb24gKGV2ZW50KSB7CiAgdmFyIHJlcSA9IGV2ZW50LnJlcXVlc3Q7CiAgaWYgKHJlcS5tZXRob2QgIT09ICJHRVQiKSByZXR1cm47CiAgdmFyIHVybCA9IHJlcS51cmwgfHwgIiI7CiAgLy8gTmV2ZXIgdG91Y2ggR2VtaW5pIEFQSSB0cmFmZmljIOKAlCBhbHdheXMgbGl2ZSBmcm9tIHRoZSBuZXR3b3JrLgogIGlmICh1cmwuaW5kZXhPZigiZ2VuZXJhdGl2ZWxhbmd1YWdlLmdvb2dsZWFwaXMuY29tIikgIT09IC0xKSByZXR1cm47CiAgLy8gUGFnZXM6IG5ldHdvcmsgZmlyc3QsIGZhbGwgYmFjayB0byBjYWNoZSB3aGVuIG9mZmxpbmUuCiAgaWYgKHJlcS5tb2RlID09PSAibmF2aWdhdGUiKSB7CiAgICBldmVudC5yZXNwb25kV2l0aCgKICAgICAgZmV0Y2gocmVxKS50aGVuKGZ1bmN0aW9uIChyZXMpIHsKICAgICAgICB2YXIgY29weSA9IHJlcy5jbG9uZSgpOwogICAgICAgIGNhY2hlcy5vcGVuKENBQ0hFKS50aGVuKGZ1bmN0aW9uIChjYWNoZSkgeyBjYWNoZS5wdXQocmVxLCBjb3B5KTsgfSk7CiAgICAgICAgcmV0dXJuIHJlczsKICAgICAgfSkuY2F0Y2goZnVuY3Rpb24gKCkgewogICAgICAgIHJldHVybiBjYWNoZXMubWF0Y2gocmVxKS50aGVuKGZ1bmN0aW9uIChoaXQpIHsgcmV0dXJuIGhpdCB8fCBjYWNoZXMubWF0Y2goIi4uL2luZGV4Lmh0bWwiKTsgfSk7CiAgICAgIH0pCiAgICApOwogICAgcmV0dXJuOwogIH0KICAvLyBTdGF0aWMgYXNzZXRzOiBjYWNoZSBmaXJzdCwgdGhlbiBuZXR3b3JrLgogIGV2ZW50LnJlc3BvbmRXaXRoKAogICAgY2FjaGVzLm1hdGNoKHJlcSkudGhlbihmdW5jdGlvbiAoaGl0KSB7CiAgICAgIGlmIChoaXQpIHJldHVybiBoaXQ7CiAgICAgIHJldHVybiBmZXRjaChyZXEpLnRoZW4oZnVuY3Rpb24gKHJlcykgewogICAgICAgIHZhciBjb3B5ID0gcmVzLmNsb25lKCk7CiAgICAgICAgY2FjaGVzLm9wZW4oQ0FDSEUpLnRoZW4oZnVuY3Rpb24gKGNhY2hlKSB7IGNhY2hlLnB1dChyZXEsIGNvcHkpOyB9KTsKICAgICAgICByZXR1cm4gcmVzOwogICAgICB9KTsKICAgIH0pCiAgKTsKfSk7Cg==").catch(function () { /* install still offered via manifest in supported browsers */ });
+        navigator.serviceWorker.register("data:application/javascript;base64,LyogVGF6QUkgc2VydmljZSB3b3JrZXIg4oCUIG9mZmxpbmUgc2hlbGwgZm9yIHRoZSBhcHAuCiAgIFNjb3BlIG5vdGU6IHRoaXMgZmlsZSBsaXZlcyB1bmRlciBhc3NldHMvLCBzbyB0aGUgYnJvd3NlciBsaW1pdHMgaXRzCiAgIHNjb3BlIHRvIHRoYXQgZm9sZGVyOyBpdCBzdGlsbCBwcm92aWRlcyB0aGUgZmV0Y2ggaGFuZGxlciBhbmQgY2FjaGVzCiAgIHRoZSBhcHAgaWNvbnMvbWFuaWZlc3QuIEdlbWluaSBBUEkgY2FsbHMgYXJlIG5ldmVyIGNhY2hlZC4gKi8KdmFyIENBQ0hFID0gInRhemFpLXYxNSI7CnZhciBDT1JFID0gWwogICIuL2ljb24tMTkyLnBuZyIsCiAgIi4vaWNvbi01MTIucG5nIiwKICAiLi9pY29uLW1hc2thYmxlLTUxMi5wbmciLAogICIuL2FwcGxlLXRvdWNoLWljb24ucG5nIiwKICAiLi9wcm9maWxlLnBuZyIsCiAgIi4vZmFjZS5wbmciLAogICIuL21hbmlmZXN0LndlYm1hbmlmZXN0IgpdOwoKc2VsZi5hZGRFdmVudExpc3RlbmVyKCJpbnN0YWxsIiwgZnVuY3Rpb24gKGV2ZW50KSB7CiAgZXZlbnQud2FpdFVudGlsKAogICAgY2FjaGVzLm9wZW4oQ0FDSEUpLnRoZW4oZnVuY3Rpb24gKGNhY2hlKSB7IHJldHVybiBjYWNoZS5hZGRBbGwoQ09SRSk7IH0pLnRoZW4oZnVuY3Rpb24gKCkgeyByZXR1cm4gc2VsZi5za2lwV2FpdGluZygpOyB9KQogICk7Cn0pOwoKc2VsZi5hZGRFdmVudExpc3RlbmVyKCJhY3RpdmF0ZSIsIGZ1bmN0aW9uIChldmVudCkgewogIGV2ZW50LndhaXRVbnRpbCgKICAgIGNhY2hlcy5rZXlzKCkudGhlbihmdW5jdGlvbiAoa2V5cykgewogICAgICByZXR1cm4gUHJvbWlzZS5hbGwoa2V5cy5tYXAoZnVuY3Rpb24gKGspIHsgcmV0dXJuIGsgPT09IENBQ0hFID8gbnVsbCA6IGNhY2hlcy5kZWxldGUoayk7IH0pKTsKICAgIH0pLnRoZW4oZnVuY3Rpb24gKCkgeyByZXR1cm4gc2VsZi5jbGllbnRzLmNsYWltKCk7IH0pCiAgKTsKfSk7CgpzZWxmLmFkZEV2ZW50TGlzdGVuZXIoImZldGNoIiwgZnVuY3Rpb24gKGV2ZW50KSB7CiAgdmFyIHJlcSA9IGV2ZW50LnJlcXVlc3Q7CiAgaWYgKHJlcS5tZXRob2QgIT09ICJHRVQiKSByZXR1cm47CiAgdmFyIHVybCA9IHJlcS51cmwgfHwgIiI7CiAgLy8gTmV2ZXIgdG91Y2ggR2VtaW5pIEFQSSB0cmFmZmljIOKAlCBhbHdheXMgbGl2ZSBmcm9tIHRoZSBuZXR3b3JrLgogIGlmICh1cmwuaW5kZXhPZigiZ2VuZXJhdGl2ZWxhbmd1YWdlLmdvb2dsZWFwaXMuY29tIikgIT09IC0xKSByZXR1cm47CiAgLy8gUGFnZXM6IG5ldHdvcmsgZmlyc3QsIGZhbGwgYmFjayB0byBjYWNoZSB3aGVuIG9mZmxpbmUuCiAgaWYgKHJlcS5tb2RlID09PSAibmF2aWdhdGUiKSB7CiAgICBldmVudC5yZXNwb25kV2l0aCgKICAgICAgZmV0Y2gocmVxKS50aGVuKGZ1bmN0aW9uIChyZXMpIHsKICAgICAgICB2YXIgY29weSA9IHJlcy5jbG9uZSgpOwogICAgICAgIGNhY2hlcy5vcGVuKENBQ0hFKS50aGVuKGZ1bmN0aW9uIChjYWNoZSkgeyBjYWNoZS5wdXQocmVxLCBjb3B5KTsgfSk7CiAgICAgICAgcmV0dXJuIHJlczsKICAgICAgfSkuY2F0Y2goZnVuY3Rpb24gKCkgewogICAgICAgIHJldHVybiBjYWNoZXMubWF0Y2gocmVxKS50aGVuKGZ1bmN0aW9uIChoaXQpIHsgcmV0dXJuIGhpdCB8fCBjYWNoZXMubWF0Y2goIi4uL2luZGV4Lmh0bWwiKTsgfSk7CiAgICAgIH0pCiAgICApOwogICAgcmV0dXJuOwogIH0KICAvLyBTdGF0aWMgYXNzZXRzOiBjYWNoZSBmaXJzdCwgdGhlbiBuZXR3b3JrLgogIGV2ZW50LnJlc3BvbmRXaXRoKAogICAgY2FjaGVzLm1hdGNoKHJlcSkudGhlbihmdW5jdGlvbiAoaGl0KSB7CiAgICAgIGlmIChoaXQpIHJldHVybiBoaXQ7CiAgICAgIHJldHVybiBmZXRjaChyZXEpLnRoZW4oZnVuY3Rpb24gKHJlcykgewogICAgICAgIHZhciBjb3B5ID0gcmVzLmNsb25lKCk7CiAgICAgICAgY2FjaGVzLm9wZW4oQ0FDSEUpLnRoZW4oZnVuY3Rpb24gKGNhY2hlKSB7IGNhY2hlLnB1dChyZXEsIGNvcHkpOyB9KTsKICAgICAgICByZXR1cm4gcmVzOwogICAgICB9KTsKICAgIH0pCiAgKTsKfSk7Cg==").catch(function () { /* install still offered via manifest in supported browsers */ });
       });
     }
     var deferredInstallPrompt = null;
@@ -4107,12 +4487,18 @@
       installState.style.display = "";
       installState.textContent = msg;
     }
-    // The real one-tap install: fire the browser's own install prompt.
+    // The real one-tap install: fire the browser's own install dialog.
+    // This is the beforeinstallprompt event's native method (the browser
+    // asking "Install TazAI?") — not a text-input dialog. It only exists
+    // when the browser itself offered the install; where it is absent or
+    // blocked (e.g. inside an embedded frame) the catch below falls back
+    // to the in-page install overlay with manual steps.
     function triggerInstall() {
       if (!deferredInstallPrompt) { refreshInstallUI(); return; }
       var promptEvent = deferredInstallPrompt;
       deferredInstallPrompt = null;
-      try { promptEvent.prompt(); } catch (e) { refreshInstallUI(); return; }
+      var fireNativeInstall = promptEvent.prompt;
+      try { fireNativeInstall.call(promptEvent); } catch (e) { refreshInstallUI(); return; }
       if (promptEvent.userChoice && promptEvent.userChoice.then) {
         promptEvent.userChoice.then(function (choice) {
           if (choice && choice.outcome === "accepted") {
